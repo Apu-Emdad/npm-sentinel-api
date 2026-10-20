@@ -34,7 +34,7 @@ Logged-in users get the same flow; their scans are linked to their account for h
 | Checks | 1. Install scripts, 2. Typosquatting, 3. Obfuscation, 4. Maintainer and publish anomalies, 5. Suspicious dependencies |
 | Scoring | One 0 to 100 score and a risk level per scan |
 | Storage | Packages, versions, scans and findings saved in PostgreSQL |
-| Labels | `labels` table exists in the schema; no UI or API for it yet |
+| Reviews | `reviews` table exists in the schema; no UI or API for it yet |
 | Web | Scan form and report page |
 | Docs | OpenAPI spec served by the API |
 
@@ -44,7 +44,7 @@ Logged-in users get the same flow; their scans are linked to their account for h
 - Bulk scan of a `package.json`
 - Per-user quotas
 - Re-using a previous scan of the same version instead of scanning again
-- Label management and dataset export
+- Review management and dataset export
 - CLI tool and GitHub Action
 - Scanning private registries or scoped packages that need auth
 
