@@ -1,7 +1,9 @@
 import { networkInterfaces } from 'node:os';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
+import type { Env } from './config/env.js';
 import { SWAGGER_CUSTOM_CSS, SWAGGER_CUSTOM_JS } from './swagger/swagger-ui.js';
 
 const DOCS_PATH = 'docs';
@@ -22,7 +24,8 @@ async function bootstrap() {
     customJsStr: SWAGGER_CUSTOM_JS,
   });
 
-  const port = Number(process.env.PORT ?? 3000);
+  const config = app.get<ConfigService<Env, true>>(ConfigService);
+  const port = config.get('PORT', { infer: true });
   await app.listen(port);
   printStartupInfo(port);
 }
