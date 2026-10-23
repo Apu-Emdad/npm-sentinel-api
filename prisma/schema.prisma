@@ -1,0 +1,173 @@
+// Design and rationale: docs/schema.md
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ScanStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+enum ScanError {
+  package_not_found
+  version_not_found
+  tarball_too_large
+  timeout
+  internal_error
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+}
+
+enum Severity {
+  low
+  medium
+  high
+}
+
+enum CheckType {
+  install_scripts
+  typosquatting
+  obfuscation
+  maintainer_anomaly
+  suspicious_dependency
+}
+
+enum ReviewVerdict {
+  malicious
+  benign
+}
+
+model Role {
+  id          BigInt   @id @default(autoincrement())
+  uid         String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           BigInt   @id @default(autoincrement())
+  uid          String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userName     String   @unique @map("user_name")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  roleId       BigInt   @map("role_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  role    Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  scans   Scan[]
+  reviews Review[]
+
+  @@map("users")
+}
+
+model Package {
+  id        BigInt   @id @default(autoincrement())
+  uid       String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  versions PackageVersion[]
+
+  @@map("packages")
+}
+
+model PackageVersion {
+  id          BigInt    @id @default(autoincrement())
+  uid         String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  packageId   BigInt    @map("package_id")
+  version     String
+  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  tarballUrl  String    @map("tarball_url")
+  integrity   String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  package Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  scans   Scan[]
+  reviews Review[]
+
+  @@unique([packageId, version])
+  @@map("package_versions")
+}
+
+model Scan {
+  id               BigInt     @id @default(autoincrement())
+  uid              String     @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           BigInt?    @map("user_id")
+  packageName      String     @map("package_name")
+  requestedVersion String?    @map("requested_version")
+  packageVersionId BigInt?    @map("package_version_id")
+  status           ScanStatus @default(queued)
+  // 0 to 100; enforced by a check constraint in the migration
+  riskScore        Int?       @map("risk_score") @db.SmallInt
+  riskLevel        RiskLevel? @map("risk_level")
+  error            ScanError?
+  metadataSnapshot Json?      @map("metadata_snapshot")
+  analyzerVersion  String?    @map("analyzer_version")
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  startedAt        DateTime?  @map("started_at") @db.Timestamptz
+  completedAt      DateTime?  @map("completed_at") @db.Timestamptz
+
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  packageVersion PackageVersion? @relation(fields: [packageVersionId], references: [id], onDelete: SetNull)
+  findings       Finding[]
+
+  @@index([packageVersionId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("scans")
+}
+
+model Finding {
+  id        BigInt    @id @default(autoincrement())
+  uid       String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scanId    BigInt    @map("scan_id")
+  checkType CheckType @map("check_type")
+  severity  Severity
+  summary   String
+  evidence  String
+  details   Json?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@map("findings")
+}
+
+model Review {
+  id               BigInt        @id @default(autoincrement())
+  uid              String        @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  packageVersionId BigInt        @map("package_version_id")
+  verdict          ReviewVerdict
+  source           String
+  sourceRef        String?       @map("source_ref")
+  notes            String?
+  reviewedBy       BigInt?       @map("reviewed_by")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  packageVersion PackageVersion @relation(fields: [packageVersionId], references: [id], onDelete: Cascade)
+  reviewer       User?          @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@unique([packageVersionId, source])
+  @@map("reviews")
+}
