@@ -5,9 +5,9 @@ PostgreSQL, managed with Prisma. This document is the design; `prisma/schema.pri
 ## Conventions
 
 - Table and column names are `snake_case`; tables are plural. Prisma models are `PascalCase` singular and map to them with `@@map` / `@map`.
-- Every table has two ids: `id bigint generated always as identity` (auto-increment primary key, used by foreign keys and joins) and `uid uuid default gen_random_uuid()` (unique, the only id exposed by the API).
+- Every table has two ids: `id bigserial` (auto-increment primary key from Prisma's `autoincrement()`, used by foreign keys and joins) and `uid uuid default gen_random_uuid()` (unique, the only id exposed by the API).
 - Timestamps are `timestamptz` in UTC.
-- Fixed value sets are Postgres enums. Values that grow over time (review sources) are `text`.
+- Fixed value sets are Postgres enums, named in `PascalCase` like their Prisma enums (no `@@map` on enums). Values that grow over time (review sources) are `text`.
 - No soft deletes.
 
 ## ER diagram
@@ -53,22 +53,22 @@ erDiagram
         bigint user_id FK "null if anonymous"
         bigint package_version_id FK "null until resolved"
         text package_name
-        scan_status status
+        ScanStatus status
         smallint risk_score
-        risk_level risk_level
+        RiskLevel risk_level
     }
     findings {
         bigint id PK
         uuid uid UK
         bigint scan_id FK
-        check_type check_type
-        severity severity
+        CheckType check_type
+        Severity severity
     }
     reviews {
         bigint id PK
         uuid uid UK
         bigint package_version_id FK
-        review_verdict verdict
+        ReviewVerdict verdict
         text source
     }
 ```
@@ -77,12 +77,12 @@ erDiagram
 
 | Enum | Values |
 | --- | --- |
-| `scan_status` | `queued`, `running`, `completed`, `failed` |
-| `scan_error` | `package_not_found`, `version_not_found`, `tarball_too_large`, `timeout`, `internal_error` |
-| `risk_level` | `low`, `medium`, `high` |
-| `severity` | `low`, `medium`, `high` |
-| `check_type` | `install_scripts`, `typosquatting`, `obfuscation`, `maintainer_anomaly`, `suspicious_dependency` |
-| `review_verdict` | `malicious`, `benign` |
+| `ScanStatus` | `queued`, `running`, `completed`, `failed` |
+| `ScanError` | `package_not_found`, `version_not_found`, `tarball_too_large`, `timeout`, `internal_error` |
+| `RiskLevel` | `low`, `medium`, `high` |
+| `Severity` | `low`, `medium`, `high` |
+| `CheckType` | `install_scripts`, `typosquatting`, `obfuscation`, `maintainer_anomaly`, `suspicious_dependency` |
+| `ReviewVerdict` | `malicious`, `benign` |
 
 ## Tables
 
@@ -92,7 +92,7 @@ One row per role. Seeded with `user` and `admin`.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
-| `id` | `bigint` | no | PK, identity (auto-increment) |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
 | `name` | `text` | no | Unique, e.g. `user`, `admin` |
 | `description` | `text` | yes | What the role can do |
@@ -103,7 +103,7 @@ One row per role. Seeded with `user` and `admin`.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
-| `id` | `bigint` | no | PK, identity (auto-increment) |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
 | `user_name` | `text` | no | Unique, stored lowercase. 3 to 30 characters: `a-z`, `0-9`, `_`, `-` |
 | `email` | `text` | no | Unique, stored lowercase |
@@ -118,7 +118,7 @@ One row per npm package name Sentinel has resolved on the registry.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
-| `id` | `bigint` | no | PK, identity (auto-increment) |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
 | `name` | `text` | no | Unique, full name including scope (`@scope/name`) |
 | `created_at` | `timestamptz` | no | Default `now()` |
@@ -130,7 +130,7 @@ One row per version Sentinel has resolved.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
-| `id` | `bigint` | no | PK, identity (auto-increment) |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
 | `package_id` | `bigint` | no | FK → `packages.id`, on delete cascade |
 | `version` | `text` | no | Exact semver, e.g. `1.2.3` |
@@ -147,16 +147,16 @@ One analyzer run on one package version.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
-| `id` | `bigint` | no | PK, identity (auto-increment) |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `uuid` | no | Unique, default `gen_random_uuid()`. Returned by `POST /scans` as the scan id |
 | `user_id` | `bigint` | yes | FK → `users.id`, on delete set null. `null` for anonymous scans |
 | `package_name` | `text` | no | Name as requested |
 | `requested_version` | `text` | yes | Version as requested; `null` means `latest` |
 | `package_version_id` | `bigint` | yes | FK → `package_versions.id`. Set by the worker once the version is resolved; stays `null` if the package or version does not exist |
-| `status` | `scan_status` | no | `queued`, `running`, `completed`, `failed`. Default `queued` |
+| `status` | `ScanStatus` | no | `queued`, `running`, `completed`, `failed`. Default `queued` |
 | `risk_score` | `smallint` | yes | 0 to 100, set when `completed`. Check constraint `risk_score between 0 and 100` |
-| `risk_level` | `risk_level` | yes | `low`, `medium`, `high`. Set when `completed` |
-| `error` | `scan_error` | yes | `package_not_found`, `version_not_found`, `tarball_too_large`, `timeout`, `internal_error`. Set when `failed` |
+| `risk_level` | `RiskLevel` | yes | `low`, `medium`, `high`. Set when `completed` |
+| `error` | `ScanError` | yes | `package_not_found`, `version_not_found`, `tarball_too_large`, `timeout`, `internal_error`. Set when `failed` |
 | `metadata_snapshot` | `jsonb` | yes | Registry facts the checks used: maintainers, publish times, downloads, dependencies |
 | `analyzer_version` | `text` | yes | Version of the analyzer that produced the result |
 | `created_at` | `timestamptz` | no | Default `now()` |
@@ -175,11 +175,11 @@ One red flag found by one check in one scan.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
-| `id` | `bigint` | no | PK, identity (auto-increment) |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
 | `scan_id` | `bigint` | no | FK → `scans.id`, on delete cascade |
-| `check_type` | `check_type` | no | `install_scripts`, `typosquatting`, `obfuscation`, `maintainer_anomaly`, `suspicious_dependency`. Which check produced the finding |
-| `severity` | `severity` | no | `low`, `medium`, `high` |
+| `check_type` | `CheckType` | no | `install_scripts`, `typosquatting`, `obfuscation`, `maintainer_anomaly`, `suspicious_dependency`. Which check produced the finding |
+| `severity` | `Severity` | no | `low`, `medium`, `high` |
 | `summary` | `text` | no | One-line explanation, generated by the check (not user input) |
 | `evidence` | `text` | no | The exact script, string or name that triggered it |
 | `details` | `jsonb` | yes | Check-specific data, e.g. file path, line, matched package, entropy value |
@@ -193,10 +193,10 @@ Ground truth for research. A review says whether a package version is malicious 
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
-| `id` | `bigint` | no | PK, identity (auto-increment) |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
 | `package_version_id` | `bigint` | no | FK → `package_versions.id`, on delete cascade |
-| `verdict` | `review_verdict` | no | `malicious`, `benign` |
+| `verdict` | `ReviewVerdict` | no | `malicious`, `benign` |
 | `source` | `text` | no | Where the review came from, e.g. `manual`, `github-advisory`, `osv` |
 | `source_ref` | `text` | yes | Advisory id or URL |
 | `notes` | `text` | yes | |
