@@ -19,7 +19,7 @@ yarn dev
 
 `yarn migrate:deploy` (`prisma migrate deploy`) applies the migrations in `prisma/migrations`. After changing `prisma/schema.prisma`, create a migration with `yarn migrate:dev --create-only --name <name>`, review the SQL, then apply it with `yarn migrate:dev`. `yarn dev`, `yarn build` and `yarn test:e2e` generate the Prisma client into `src/generated/prisma` first; run `yarn prisma:generate` to do it on its own (Yarn doesn't run install scripts, so it isn't generated on `yarn install`).
 
-`docker compose up` starts PostgreSQL and Redis. Data is kept in named volumes, so it survives `docker compose down`; `docker compose down -v` deletes it.
+`docker compose up` starts PostgreSQL and Redis (Redis stores the active refresh tokens). Data is kept in named volumes, so it survives `docker compose down`; `docker compose down -v` deletes it.
 
 The app validates `.env` on startup and exits with a list of the missing or invalid variables.
 

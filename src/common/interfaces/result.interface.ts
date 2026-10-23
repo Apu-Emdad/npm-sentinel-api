@@ -1,6 +1,6 @@
 /**
  * Shape of every API response, success or error.
- * ResponseInterceptor builds it for successful requests, HttpExceptionFilter for errors.
+ * Services build it for successful requests, HttpExceptionFilter for errors.
  */
 export interface Result {
   status: number;

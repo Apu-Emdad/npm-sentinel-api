@@ -4,7 +4,8 @@ const validEnv = {
   DATABASE_URL: 'postgresql://sentinel:sentinel@localhost:5433/npm_sentinel',
   REDIS_HOST: 'localhost',
   REDIS_PORT: '6380',
-  JWT_SECRET: 'a-test-secret-that-is-at-least-32-chars',
+  JWT_ACCESS_SECRET: 'a-test-access-secret-at-least-32-chars',
+  JWT_REFRESH_SECRET: 'a-test-refresh-secret-at-least-32-chars',
 };
 
 describe('validateEnv', () => {
@@ -15,8 +16,11 @@ describe('validateEnv', () => {
       DATABASE_URL: validEnv.DATABASE_URL,
       REDIS_HOST: 'localhost',
       REDIS_PORT: 6380,
-      JWT_SECRET: validEnv.JWT_SECRET,
-      JWT_EXPIRES_IN: 86400,
+      JWT_ACCESS_SECRET: validEnv.JWT_ACCESS_SECRET,
+      JWT_ACCESS_EXPIRES_IN: 900,
+      JWT_REFRESH_SECRET: validEnv.JWT_REFRESH_SECRET,
+      JWT_REFRESH_EXPIRES_IN: 604800,
+      WEB_ORIGIN: 'http://localhost:5173',
     });
   });
 

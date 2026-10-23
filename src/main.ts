@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { configureApp } from './app.setup.js';
 import type { Env } from './config/env.js';
+import { REFRESH_COOKIE } from './modules/auth/auth.controller.js';
 import { SWAGGER_CUSTOM_CSS, SWAGGER_CUSTOM_JS } from './swagger/swagger-ui.js';
 
 const DOCS_PATH = 'docs';
@@ -18,6 +19,7 @@ async function bootstrap() {
     .setDescription('Scan npm packages and get an explained risk score.')
     .setVersion('0.0.1')
     .addBearerAuth()
+    .addCookieAuth(REFRESH_COOKIE, { type: 'apiKey' }, REFRESH_COOKIE)
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup(DOCS_PATH, app, document, {
