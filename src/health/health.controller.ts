@@ -1,15 +1,15 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiTags } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator.js';
+import { ResponseMessage } from '../common/decorators/response-message.decorator.js';
 
+@Public()
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
   @Get()
-  @ApiOkResponse({
-    description: 'The API is up',
-    schema: { example: { status: 'ok' } },
-  })
-  check(): { status: string } {
+  @ResponseMessage('API is up')
+  check() {
     return { status: 'ok' };
   }
 }

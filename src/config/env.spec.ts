@@ -4,6 +4,7 @@ const validEnv = {
   DATABASE_URL: 'postgresql://sentinel:sentinel@localhost:5433/npm_sentinel',
   REDIS_HOST: 'localhost',
   REDIS_PORT: '6380',
+  JWT_SECRET: 'a-test-secret-that-is-at-least-32-chars',
 };
 
 describe('validateEnv', () => {
@@ -14,6 +15,8 @@ describe('validateEnv', () => {
       DATABASE_URL: validEnv.DATABASE_URL,
       REDIS_HOST: 'localhost',
       REDIS_PORT: 6380,
+      JWT_SECRET: validEnv.JWT_SECRET,
+      JWT_EXPIRES_IN: 86400,
     });
   });
 

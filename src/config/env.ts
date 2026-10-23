@@ -1,25 +1,60 @@
-import { z } from 'zod';
+import 'reflect-metadata';
+import { plainToInstance } from 'class-transformer';
+import {
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsPositive,
+  IsString,
+  IsUrl,
+  MinLength,
+  validateSync,
+} from 'class-validator';
 
-const envSchema = z.object({
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
-  PORT: z.coerce.number().int().positive().default(3000),
-  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
-  REDIS_HOST: z.string().min(1),
-  REDIS_PORT: z.coerce.number().int().positive(),
-});
+export class Env {
+  @IsIn(['development', 'test', 'production'])
+  NODE_ENV: 'development' | 'test' | 'production' = 'development';
 
-export type Env = z.infer<typeof envSchema>;
+  @IsInt()
+  @IsPositive()
+  PORT: number = 3000;
+
+  @IsUrl({ protocols: ['postgres', 'postgresql'], require_tld: false })
+  DATABASE_URL: string;
+
+  @IsString()
+  @IsNotEmpty()
+  REDIS_HOST: string;
+
+  @IsInt()
+  @IsPositive()
+  REDIS_PORT: number;
+
+  @IsString()
+  @MinLength(32)
+  JWT_SECRET: string;
+
+  // Seconds until an access token expires
+  @IsInt()
+  @IsPositive()
+  JWT_EXPIRES_IN: number = 86400;
+}
 
 // Used by ConfigModule: throws on startup when a variable is missing or invalid.
 export function validateEnv(config: Record<string, unknown>): Env {
-  const result = envSchema.safeParse(config);
-  if (!result.success) {
-    const problems = result.error.issues
-      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
+  const env = plainToInstance(Env, config, {
+    enableImplicitConversion: true,
+    exposeDefaultValues: true,
+  });
+  const errors = validateSync(env, { skipMissingProperties: false });
+  if (errors.length) {
+    const problems = errors
+      .map(
+        (error) =>
+          `  - ${error.property}: ${Object.values(error.constraints ?? {}).join(', ')}`,
+      )
       .join('\n');
     throw new Error(`Invalid environment variables:\n${problems}`);
   }
-  return result.data;
+  return env;
 }
