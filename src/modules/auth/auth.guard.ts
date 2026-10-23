@@ -10,8 +10,10 @@ import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator.js';
 import type { JwtPayload } from './auth.types.js';
 
-// Global guard: every route needs a valid token unless it is marked @Public().
-// On public routes a token is optional, but an invalid one is still rejected.
+/**
+ * Global guard: every route needs a valid token unless it is marked @Public().
+ * On public routes a token is optional, but an invalid one is still rejected.
+ */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(

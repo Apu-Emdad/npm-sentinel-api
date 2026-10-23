@@ -27,7 +27,7 @@ Logged-in users get the same flow; their scans are linked to their account for h
 
 | Area | What is included |
 | --- | --- |
-| Auth | Optional. Register with username, email and password; login with username or email; JWT, `user` and `admin` roles |
+| Auth | Optional. Register with username, email and password; login with username or email; JWT, `USER` and `SUPER_ADMIN` roles |
 | Scans | Public. Scan one package version per request, processed asynchronously by a worker |
 | Rate limiting | Per-IP limit on `POST /scans` |
 | Collector | Registry metadata, weekly downloads and the version tarball |
@@ -113,7 +113,7 @@ Every response, success or error, has the same shape:
 
 The examples below show `data` only.
 
-The `id` field in every payload is the row's `uid` (UUID); internal integer ids are never exposed.
+The `id` field in every payload is the row's `uid`, a 10-character random id like `k3F9x2Mq7A`; internal integer ids are never exposed.
 
 ### Auth
 
@@ -153,7 +153,7 @@ Response `202 Accepted`, `data`:
 
 ```json
 {
-  "id": "6f1c2a9e-3b4d-4c8e-9a1f-2d7e5b0c8a31",
+  "id": "k3F9x2Mq7A",
   "status": "queued",
   "packageName": "some-package",
   "version": "1.2.3",
@@ -173,7 +173,7 @@ Response `200 OK` (completed), `data`:
 
 ```json
 {
-  "id": "6f1c2a9e-3b4d-4c8e-9a1f-2d7e5b0c8a31",
+  "id": "k3F9x2Mq7A",
   "status": "completed",
   "packageName": "some-package",
   "version": "1.2.3",
@@ -217,7 +217,7 @@ Response `200 OK`, `data`:
     {
       "version": "1.2.3",
       "latestScan": {
-        "id": "6f1c2a9e-3b4d-4c8e-9a1f-2d7e5b0c8a31",
+        "id": "k3F9x2Mq7A",
         "status": "completed",
         "riskScore": 82,
         "riskLevel": "high",

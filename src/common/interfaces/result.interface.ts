@@ -1,4 +1,7 @@
-// Shape of every API response. Services return it, controllers send it with res.status(result.status).json(result).
+/**
+ * Shape of every API response, success or error.
+ * ResponseInterceptor builds it for successful requests, HttpExceptionFilter for errors.
+ */
 export interface Result {
   status: number;
   message: string;

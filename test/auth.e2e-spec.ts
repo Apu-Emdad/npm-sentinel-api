@@ -12,7 +12,7 @@ type FakeUser = Record<string, any>;
 // In-memory stand-in for the Prisma user queries AuthService makes, so these tests never touch a database.
 function createFakePrisma() {
   const users: FakeUser[] = [];
-  const role = { id: 1n, uid: 'role-uid', name: 'user' };
+  const role = { id: 1n, uid: 'role-uid', name: 'USER' };
   const matches = (user: FakeUser, where: Record<string, string>) =>
     Object.entries(where).every(([key, value]) => user[key] === value);
 
@@ -26,8 +26,11 @@ function createFakePrisma() {
         users.find((u) =>
           where.OR.some((condition) => matches(u, condition)),
         ) ?? null,
-      findUnique: async ({ where }: { where: Record<string, string> }) =>
-        users.find((u) => matches(u, where)) ?? null,
+      findUnique: async ({ where }: { where: Record<string, string> }) => {
+        // Lets a test simulate the database failing.
+        if (where.userName === 'db_down') throw new Error('database is down');
+        return users.find((u) => matches(u, where)) ?? null;
+      },
       create: async ({ data }: { data: FakeUser }) => {
         const { role: _role, ...fields } = data;
         const user = {
@@ -84,7 +87,7 @@ describe('Auth (e2e)', () => {
     expect(res.body.data.user).toMatchObject({
       userName: 'apu_emdad',
       email: 'apu@example.com',
-      role: 'user',
+      role: 'USER',
     });
   });
 
@@ -94,6 +97,8 @@ describe('Auth (e2e)', () => {
     expect(res.body).toEqual({
       status: 409,
       message: 'Username is already taken',
+      error: 'Conflict',
+      context: 'POST /auth/register',
     });
   });
 
@@ -153,5 +158,19 @@ describe('Auth (e2e)', () => {
       .get('/health')
       .set('Authorization', 'Bearer not-a-real-token')
       .expect(401);
+  });
+
+  it('sends unexpected errors as a 500 Result with the route message', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ userNameOrEmail: 'db_down', password: 'whatever-123' })
+      .expect(500);
+
+    expect(res.body).toEqual({
+      status: 500,
+      message: 'An error occurred while logging in',
+      error: 'database is down',
+      context: 'POST /auth/login',
+    });
   });
 });

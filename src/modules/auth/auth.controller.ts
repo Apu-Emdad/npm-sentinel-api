@@ -1,9 +1,16 @@
-import { Body, Controller, Get, Post, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { ErrorMessage } from '../../common/decorators/error-message.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
-import type { Result } from '../../common/interfaces/result.interface.js';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator.js';
 import { AuthService } from './auth.service.js';
 import type { AuthUser } from './auth.types.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -16,25 +23,26 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  async register(@Body() dto: RegisterDto, @Res() res: Response) {
-    const result: Result = await this.authService.register(dto);
-
-    return res.status(result.status).json(result);
+  @ResponseMessage('Registration successful')
+  @ErrorMessage('An error occurred while registering')
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 
   @Public()
   @Post('login')
-  async login(@Body() dto: LoginDto, @Res() res: Response) {
-    const result: Result = await this.authService.login(dto);
-
-    return res.status(result.status).json(result);
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Login successful')
+  @ErrorMessage('An error occurred while logging in')
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
   @Get('me')
   @ApiBearerAuth()
-  async me(@CurrentUser() authUser: AuthUser, @Res() res: Response) {
-    const result: Result = await this.authService.me(authUser.uid);
-
-    return res.status(result.status).json(result);
+  @ResponseMessage('Current user fetched successfully')
+  @ErrorMessage('An error occurred while fetching the current user')
+  me(@CurrentUser() authUser: AuthUser) {
+    return this.authService.me(authUser.uid);
   }
 }

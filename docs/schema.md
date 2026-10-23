@@ -5,7 +5,7 @@ PostgreSQL, managed with Prisma. This document is the design; `prisma/schema.pri
 ## Conventions
 
 - Table and column names are `snake_case`; tables are plural. Prisma models are `PascalCase` singular and map to them with `@@map` / `@map`.
-- Every table has two ids: `id bigserial` (auto-increment primary key from Prisma's `autoincrement()`, used by foreign keys and joins) and `uid uuid default gen_random_uuid()` (unique, the only id exposed by the API).
+- Every table has two ids: `id bigserial` (auto-increment primary key from Prisma's `autoincrement()`, used by foreign keys and joins) and `uid text default generate_uid()` (a unique 10-character random id from `0-9a-zA-Z`, the only id exposed by the API). `generate_uid()` is a Postgres function created in the `use_short_uids` migration (as `short_id()`) and renamed in `rename_short_id_to_generate_uid`.
 - Timestamps are `timestamptz` in UTC.
 - Fixed value sets are Postgres enums, named in `PascalCase` like their Prisma enums (no `@@map` on enums). Values that grow over time (review sources) are `text`.
 - No soft deletes.
@@ -24,12 +24,12 @@ erDiagram
 
     roles {
         bigint id PK
-        uuid uid UK
+        text uid UK
         text name UK
     }
     users {
         bigint id PK
-        uuid uid UK
+        text uid UK
         text user_name UK
         text email UK
         text password_hash
@@ -37,19 +37,19 @@ erDiagram
     }
     packages {
         bigint id PK
-        uuid uid UK
+        text uid UK
         text name UK
     }
     package_versions {
         bigint id PK
-        uuid uid UK
+        text uid UK
         bigint package_id FK
         text version
         timestamptz published_at
     }
     scans {
         bigint id PK
-        uuid uid UK
+        text uid UK
         bigint user_id FK "null if anonymous"
         bigint package_version_id FK "null until resolved"
         text package_name
@@ -59,14 +59,14 @@ erDiagram
     }
     findings {
         bigint id PK
-        uuid uid UK
+        text uid UK
         bigint scan_id FK
         CheckType check_type
         Severity severity
     }
     reviews {
         bigint id PK
-        uuid uid UK
+        text uid UK
         bigint package_version_id FK
         ReviewVerdict verdict
         text source
@@ -88,13 +88,13 @@ erDiagram
 
 ### `roles`
 
-One row per role. Seeded with `user` and `admin`.
+One row per role. Seeded with `USER` and `SUPER_ADMIN`; code refers to them through the `ROLE` constant (`src/common/constants/roles.ts`).
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
-| `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
-| `name` | `text` | no | Unique, e.g. `user`, `admin` |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters) |
+| `name` | `text` | no | Unique, e.g. `USER`, `SUPER_ADMIN` |
 | `description` | `text` | yes | What the role can do |
 | `created_at` | `timestamptz` | no | Default `now()` |
 | `updated_at` | `timestamptz` | no | Updated by Prisma |
@@ -104,11 +104,11 @@ One row per role. Seeded with `user` and `admin`.
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
-| `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters) |
 | `user_name` | `text` | no | Unique, stored lowercase. 3 to 30 characters: `a-z`, `0-9`, `_`, `-` |
 | `email` | `text` | no | Unique, stored lowercase |
 | `password_hash` | `text` | no | bcrypt or argon2 hash |
-| `role_id` | `bigint` | no | FK → `roles.id`, on delete restrict. New users get the `user` role |
+| `role_id` | `bigint` | no | FK → `roles.id`, on delete restrict. New users get the `USER` role |
 | `created_at` | `timestamptz` | no | Default `now()` |
 | `updated_at` | `timestamptz` | no | Updated by Prisma |
 
@@ -119,7 +119,7 @@ One row per npm package name Sentinel has resolved on the registry.
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
-| `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters) |
 | `name` | `text` | no | Unique, full name including scope (`@scope/name`) |
 | `created_at` | `timestamptz` | no | Default `now()` |
 | `updated_at` | `timestamptz` | no | Updated by Prisma |
@@ -131,7 +131,7 @@ One row per version Sentinel has resolved.
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
-| `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters) |
 | `package_id` | `bigint` | no | FK → `packages.id`, on delete cascade |
 | `version` | `text` | no | Exact semver, e.g. `1.2.3` |
 | `published_at` | `timestamptz` | yes | From registry `time[version]` |
@@ -148,7 +148,7 @@ One analyzer run on one package version.
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
-| `uid` | `uuid` | no | Unique, default `gen_random_uuid()`. Returned by `POST /scans` as the scan id |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters). Returned by `POST /scans` as the scan id |
 | `user_id` | `bigint` | yes | FK → `users.id`, on delete set null. `null` for anonymous scans |
 | `package_name` | `text` | no | Name as requested |
 | `requested_version` | `text` | yes | Version as requested; `null` means `latest` |
@@ -176,7 +176,7 @@ One red flag found by one check in one scan.
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
-| `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters) |
 | `scan_id` | `bigint` | no | FK → `scans.id`, on delete cascade |
 | `check_type` | `CheckType` | no | `install_scripts`, `typosquatting`, `obfuscation`, `maintainer_anomaly`, `suspicious_dependency`. Which check produced the finding |
 | `severity` | `Severity` | no | `low`, `medium`, `high` |
@@ -194,7 +194,7 @@ Ground truth for research. A review says whether a package version is malicious 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
-| `uid` | `uuid` | no | Unique, default `gen_random_uuid()` |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters) |
 | `package_version_id` | `bigint` | no | FK → `package_versions.id`, on delete cascade |
 | `verdict` | `ReviewVerdict` | no | `malicious`, `benign` |
 | `source` | `text` | no | Where the review came from, e.g. `manual`, `github-advisory`, `osv` |

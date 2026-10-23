@@ -9,7 +9,7 @@ interface LogErrorInput {
   context: string;
 }
 
-// Used in every service catch block: logs the unexpected error and returns a 500 Result.
+// Used by HttpExceptionFilter for unexpected errors: logs the full error and returns a 500 Result.
 @Injectable()
 export class ErrorLoggerService {
   private readonly logger = new Logger(ErrorLoggerService.name);
@@ -17,7 +17,11 @@ export class ErrorLoggerService {
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   logError({ errorMessage, errorStack, context }: LogErrorInput): Result {
-    this.logger.error(errorMessage, errorStack, context);
+    this.logger.error(
+      errorMessage,
+      errorStack instanceof Error ? errorStack.stack : String(errorStack),
+      context,
+    );
 
     const isProduction =
       this.config.get('NODE_ENV', { infer: true }) === 'production';

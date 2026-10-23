@@ -1,6 +1,8 @@
-// Injected into the Swagger UI page through SwaggerModule.setup options.
-// Adds a fixed left sidebar listing every tag, with pinning saved in localStorage,
-// and authorizes Swagger automatically after a register or login call.
+/**
+ * Injected into the Swagger UI page through SwaggerModule.setup options.
+ * Adds a fixed left sidebar listing every tag, with pinning saved in localStorage,
+ * and authorizes Swagger automatically after a register or login call.
+ */
 
 export const SWAGGER_CUSTOM_CSS = `
   body { display: block; padding-left: 250px; box-sizing: border-box; }
@@ -120,8 +122,10 @@ export const SWAGGER_CUSTOM_JS = `
 
     buildNav();
 
-    // Token automation: a successful register or login from "Try it out" authorizes Swagger,
-    // and the token is restored after a page reload.
+    /**
+     * Token automation: a successful register or login from "Try it out" authorizes Swagger,
+     * and the token is restored after a page reload.
+     */
     const AUTH_KEY = 'npm-sentinel-swagger-auth';
     const authorize = (token) => {
       if (token && window.ui) window.ui.preauthorizeApiKey('bearer', token);

@@ -1,7 +1,12 @@
+import {
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Env } from '../../config/env.js';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { ErrorLoggerService } from '../../common/error-logger/error-logger.service.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import { AuthService } from './auth.service.js';
 
@@ -21,7 +26,7 @@ async function makeUser(password: string) {
     role: {
       id: 1n,
       uid: 'role-uid',
-      name: 'user',
+      name: 'USER',
       description: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -45,14 +50,11 @@ describe('AuthService', () => {
       user: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
     };
     jwtService = new JwtService({ secret: SECRET });
-    const config = {
-      get: (key: string) => (key === 'NODE_ENV' ? 'test' : 86400),
-    } as unknown as ConfigService;
+    const config = { get: () => 86400 } as unknown as ConfigService<Env, true>;
     authService = new AuthService(
       prisma as unknown as PrismaService,
       jwtService,
       config,
-      new ErrorLoggerService(config),
     );
   });
 
@@ -71,37 +73,35 @@ describe('AuthService', () => {
       password: 'correct-horse-battery',
     });
 
-    expect(result.status).toBe(201);
     const { data } = prisma.user.create.mock.calls[0][0];
     expect(data.passwordHash).not.toBe('correct-horse-battery');
     expect(
       await argon2.verify(data.passwordHash, 'correct-horse-battery'),
     ).toBe(true);
-    expect(data.role).toEqual({ connect: { name: 'user' } });
-    expect(result.data.user).toEqual({
+    expect(data.role).toEqual({ connect: { name: 'USER' } });
+    expect(result.user).toEqual({
       id: USER_UID,
       userName: 'apu_emdad',
       email: 'apu@example.com',
-      role: 'user',
+      role: 'USER',
     });
-    expect(await jwtService.verifyAsync(result.data.accessToken)).toMatchObject(
-      { sub: USER_UID, userName: 'apu_emdad', role: 'user' },
-    );
+    expect(await jwtService.verifyAsync(result.accessToken)).toMatchObject({
+      sub: USER_UID,
+      userName: 'apu_emdad',
+      role: 'USER',
+    });
   });
 
   it('register rejects a taken username', async () => {
     prisma.user.findFirst.mockResolvedValue({ userName: 'apu_emdad' });
 
-    const result = await authService.register({
-      userName: 'apu_emdad',
-      email: 'other@example.com',
-      password: 'correct-horse-battery',
-    });
-
-    expect(result).toEqual({
-      status: 409,
-      message: 'Username is already taken',
-    });
+    await expect(
+      authService.register({
+        userName: 'apu_emdad',
+        email: 'other@example.com',
+        password: 'correct-horse-battery',
+      }),
+    ).rejects.toThrow(new ConflictException('Username is already taken'));
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
@@ -118,9 +118,8 @@ describe('AuthService', () => {
     expect(prisma.user.findUnique.mock.calls[0][0].where).toEqual({
       email: 'apu@example.com',
     });
-    expect(result.status).toBe(200);
-    expect(result.data.tokenType).toBe('Bearer');
-    expect(result.data.expiresIn).toBe(86400);
+    expect(result.tokenType).toBe('Bearer');
+    expect(result.expiresIn).toBe(86400);
   });
 
   it('login rejects a wrong password', async () => {
@@ -128,41 +127,35 @@ describe('AuthService', () => {
       await makeUser('correct-horse-battery'),
     );
 
-    const result = await authService.login({
-      userNameOrEmail: 'apu_emdad',
-      password: 'wrong',
-    });
-
-    expect(result.status).toBe(401);
+    await expect(
+      authService.login({ userNameOrEmail: 'apu_emdad', password: 'wrong' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('login rejects an unknown user with the same error', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
-    const result = await authService.login({
-      userNameOrEmail: 'nobody',
-      password: 'whatever',
-    });
-
-    expect(result).toEqual({
-      status: 401,
-      message: 'Invalid username, email or password',
-    });
+    await expect(
+      authService.login({ userNameOrEmail: 'nobody', password: 'whatever' }),
+    ).rejects.toThrow(
+      new UnauthorizedException('Invalid username, email or password'),
+    );
   });
 
-  it('returns a 500 Result when the database fails', async () => {
+  it('me rejects an unknown user', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(authService.me(USER_UID)).rejects.toThrow(NotFoundException);
+  });
+
+  it('lets unexpected errors propagate to the global filter', async () => {
     prisma.user.findUnique.mockRejectedValue(new Error('connection refused'));
 
-    const result = await authService.login({
-      userNameOrEmail: 'apu_emdad',
-      password: 'correct-horse-battery',
-    });
-
-    expect(result).toEqual({
-      status: 500,
-      message: 'An error occurred while logging in',
-      error: 'connection refused',
-      context: 'AuthService - login',
-    });
+    await expect(
+      authService.login({
+        userNameOrEmail: 'apu_emdad',
+        password: 'correct-horse-battery',
+      }),
+    ).rejects.toThrow('connection refused');
   });
 });

@@ -3,17 +3,25 @@ import {
   Catch,
   ExceptionFilter,
   HttpException,
-  HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { ErrorLoggerService } from '../error-logger/error-logger.service.js';
 import type { Result } from '../interfaces/result.interface.js';
 
-// Sends every thrown error in the Result shape.
-// Validation errors put the list of problems in `data`; unexpected errors hide their details.
+const GENERIC_ERROR_MESSAGE = 'Something went wrong';
+
+/**
+ * Global error handler
+ *
+ * Sends every error that escapes a request in the Result shape.
+ * - HTTP errors (validation, guards, thrown HttpExceptions) keep their status.
+ *   Validation errors put the list of problems in `data`.
+ * - Unexpected errors are logged and become a 500. Users get the route's
+ *   @ErrorMessage text (or a generic one); the raw error is only included outside production.
+ */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(HttpExceptionFilter.name);
+  constructor(private readonly errorLogger: ErrorLoggerService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
@@ -22,13 +30,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const context = `${req.method} ${req.path}`;
 
     if (!(exception instanceof HttpException)) {
-      this.logger.error(exception, context);
-      const result: Result = {
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Internal server error',
-        error: 'Internal Server Error',
+      const result: Result = this.errorLogger.logError({
+        errorMessage: req.errorMessage ?? GENERIC_ERROR_MESSAGE,
+        errorStack: exception,
         context,
-      };
+      });
       res.status(result.status).json(result);
       return;
     }

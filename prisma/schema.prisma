@@ -51,7 +51,7 @@ enum ReviewVerdict {
 
 model Role {
   id          BigInt   @id @default(autoincrement())
-  uid         String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uid         String   @unique @default(dbgenerated("generate_uid()"))
   name        String   @unique
   description String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -64,7 +64,7 @@ model Role {
 
 model User {
   id           BigInt   @id @default(autoincrement())
-  uid          String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uid          String   @unique @default(dbgenerated("generate_uid()"))
   userName     String   @unique @map("user_name")
   email        String   @unique
   passwordHash String   @map("password_hash")
@@ -81,7 +81,7 @@ model User {
 
 model Package {
   id        BigInt   @id @default(autoincrement())
-  uid       String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uid       String   @unique @default(dbgenerated("generate_uid()"))
   name      String   @unique
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
@@ -93,7 +93,7 @@ model Package {
 
 model PackageVersion {
   id          BigInt    @id @default(autoincrement())
-  uid         String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uid         String    @unique @default(dbgenerated("generate_uid()"))
   packageId   BigInt    @map("package_id")
   version     String
   publishedAt DateTime? @map("published_at") @db.Timestamptz
@@ -111,7 +111,7 @@ model PackageVersion {
 
 model Scan {
   id               BigInt     @id @default(autoincrement())
-  uid              String     @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uid              String     @unique @default(dbgenerated("generate_uid()"))
   userId           BigInt?    @map("user_id")
   packageName      String     @map("package_name")
   requestedVersion String?    @map("requested_version")
@@ -139,7 +139,7 @@ model Scan {
 
 model Finding {
   id        BigInt    @id @default(autoincrement())
-  uid       String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uid       String    @unique @default(dbgenerated("generate_uid()"))
   scanId    BigInt    @map("scan_id")
   checkType CheckType @map("check_type")
   severity  Severity
@@ -156,7 +156,7 @@ model Finding {
 
 model Review {
   id               BigInt        @id @default(autoincrement())
-  uid              String        @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uid              String        @unique @default(dbgenerated("generate_uid()"))
   packageVersionId BigInt        @map("package_version_id")
   verdict          ReviewVerdict
   source           String

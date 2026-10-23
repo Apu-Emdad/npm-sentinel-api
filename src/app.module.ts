@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ErrorLoggerModule } from './common/error-logger/error-logger.module.js';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
 import { validateEnv } from './config/env.js';
 import { HealthController } from './health/health.controller.js';
 import { AuthGuard } from './modules/auth/auth.guard.js';
@@ -26,7 +27,9 @@ import { PrismaModule } from './prisma/prisma.module.js';
     // Order matters: AuthGuard sets request.user, RolesGuard reads it.
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    // Thrown errors (validation, guards, HttpException) are sent in the Result shape.
+    // Wraps successful responses in the Result shape.
+    { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
+    // Sends every error that escapes a request in the Result shape.
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })
