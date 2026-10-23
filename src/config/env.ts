@@ -32,12 +32,25 @@ export class Env {
 
   @IsString()
   @MinLength(32)
-  JWT_SECRET: string;
+  JWT_ACCESS_SECRET: string;
 
   // Seconds until an access token expires
   @IsInt()
   @IsPositive()
-  JWT_EXPIRES_IN: number = 86400;
+  JWT_ACCESS_EXPIRES_IN: number = 900;
+
+  @IsString()
+  @MinLength(32)
+  JWT_REFRESH_SECRET: string;
+
+  // Seconds until a refresh token expires
+  @IsInt()
+  @IsPositive()
+  JWT_REFRESH_EXPIRES_IN: number = 604800;
+
+  // Origin of the web app, allowed by CORS to send the refresh cookie
+  @IsUrl({ require_tld: false })
+  WEB_ORIGIN: string = 'http://localhost:5173';
 }
 
 // Used by ConfigModule: throws on startup when a variable is missing or invalid.

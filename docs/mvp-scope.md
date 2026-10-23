@@ -117,17 +117,27 @@ The `id` field in every payload is the row's `uid`, a 10-character random id lik
 
 ### Auth
 
-Every route needs a JWT (`Authorization: Bearer <token>`) unless it is public. On public routes the token is optional, but an invalid one is rejected with `401`.
+Every route needs an access token (`Authorization: Bearer <token>`) unless it is public. On public routes the token is optional, but an invalid one is rejected with `401`.
 
 | Endpoint | Access | Body | `data` |
 | --- | --- | --- | --- |
 | `POST /auth/register` | Public | `userName`, `email`, `password` | `accessToken`, `tokenType`, `expiresIn`, `user` |
 | `POST /auth/login` | Public | `userNameOrEmail`, `password` | Same as register |
+| `POST /auth/refresh` | Refresh cookie | | `accessToken`, `tokenType`, `expiresIn` |
+| `POST /auth/logout` | Refresh cookie | | `null` |
 | `GET /auth/me` | Logged in | | `id`, `userName`, `email`, `role` |
 
 - `userName`: 3 to 30 characters, `a-z`, `0-9`, `_`, `-`. Username and email are stored lowercase.
 - `password`: 8 to 128 characters.
 - Errors: `400` invalid body, `401` wrong credentials or token, `409` username or email already in use.
+
+#### Access and refresh tokens
+
+- The **access token** (15 minutes by default) is returned in `data` and sent as `Authorization: Bearer <token>`.
+- The **refresh token** (7 days by default) is never in the body. Register, login and refresh set it in the `refresh_token` cookie: `httpOnly`, `SameSite=Strict`, `Path=/auth`, and `Secure` in production.
+- When the access token expires, the client calls `POST /auth/refresh`. The browser sends the cookie automatically (the web app must use `credentials: 'include'`). The response has a new access token and the cookie gets a new refresh token.
+- Each refresh token works once and is tracked in Redis. Using an already-used refresh token is treated as theft: every refresh token of that user is revoked and they must log in again.
+- `POST /auth/logout` revokes the refresh token and clears the cookie.
 
 ### Scans and packages
 

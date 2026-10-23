@@ -50,12 +50,12 @@ enum ReviewVerdict {
 }
 
 model Role {
-  id          BigInt   @id @default(autoincrement())
-  uid         String   @unique @default(dbgenerated("generate_uid()"))
-  name        String   @unique
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id              BigInt   @id @default(autoincrement())
+  uid             String   @unique @default(dbgenerated("generate_uid()"))
+  name            String   @unique
+  rolePermissions Json?    @map("role_permissions")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   users User[]
 
@@ -69,12 +69,13 @@ model User {
   email        String   @unique
   passwordHash String   @map("password_hash")
   roleId       BigInt   @map("role_id")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  role    Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  scans   Scan[]
-  reviews Review[]
+  roleInfo Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  scans    Scan[]
+  reviews  Review[]
 
   @@map("users")
 }
@@ -83,10 +84,10 @@ model Package {
   id        BigInt   @id @default(autoincrement())
   uid       String   @unique @default(dbgenerated("generate_uid()"))
   name      String   @unique
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  versions PackageVersion[]
+  packageVersions PackageVersion[]
 
   @@map("packages")
 }
@@ -96,14 +97,14 @@ model PackageVersion {
   uid         String    @unique @default(dbgenerated("generate_uid()"))
   packageId   BigInt    @map("package_id")
   version     String
-  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  publishedAt DateTime? @map("published_at")
   tarballUrl  String    @map("tarball_url")
   integrity   String?
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at")
 
-  package Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  scans   Scan[]
-  reviews Review[]
+  packageInfo Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  scans       Scan[]
+  reviews     Review[]
 
   @@unique([packageId, version])
   @@map("package_versions")
@@ -117,19 +118,18 @@ model Scan {
   requestedVersion String?    @map("requested_version")
   packageVersionId BigInt?    @map("package_version_id")
   status           ScanStatus @default(queued)
-  // 0 to 100; enforced by a check constraint in the migration
   riskScore        Int?       @map("risk_score") @db.SmallInt
   riskLevel        RiskLevel? @map("risk_level")
   error            ScanError?
   metadataSnapshot Json?      @map("metadata_snapshot")
   analyzerVersion  String?    @map("analyzer_version")
-  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz
-  startedAt        DateTime?  @map("started_at") @db.Timestamptz
-  completedAt      DateTime?  @map("completed_at") @db.Timestamptz
+  createdAt        DateTime   @default(now()) @map("created_at")
+  startedAt        DateTime?  @map("started_at")
+  completedAt      DateTime?  @map("completed_at")
 
-  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  packageVersion PackageVersion? @relation(fields: [packageVersionId], references: [id], onDelete: SetNull)
-  findings       Finding[]
+  scannerInfo        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  packageVersionInfo PackageVersion? @relation(fields: [packageVersionId], references: [id], onDelete: SetNull)
+  findings           Finding[]
 
   @@index([packageVersionId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
@@ -146,9 +146,9 @@ model Finding {
   summary   String
   evidence  String
   details   Json?
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at")
 
-  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanInfo Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   @@index([scanId])
   @@map("findings")
@@ -163,10 +163,10 @@ model Review {
   sourceRef        String?       @map("source_ref")
   notes            String?
   reviewedBy       BigInt?       @map("reviewed_by")
-  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  createdAt        DateTime      @default(now()) @map("created_at")
 
-  packageVersion PackageVersion @relation(fields: [packageVersionId], references: [id], onDelete: Cascade)
-  reviewer       User?          @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
+  packageVersionInfo PackageVersion @relation(fields: [packageVersionId], references: [id], onDelete: Cascade)
+  reviewerInfo       User?          @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
 
   @@unique([packageVersionId, source])
   @@map("reviews")
