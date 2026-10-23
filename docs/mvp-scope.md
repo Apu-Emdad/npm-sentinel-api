@@ -74,11 +74,66 @@ Failure reasons: `package_not_found`, `version_not_found`, `tarball_too_large`, 
 
 ## API contract
 
-The `id` field in every response is the row's `uid` (UUID); internal integer ids are never exposed.
+### Response format
 
-The endpoints below are public. A JWT (`Authorization: Bearer <token>`) is optional on `POST /scans`: when a valid one is sent, the scan is linked to that user. Auth endpoints are defined in issue #6.
+Every response, success or error, has the same shape:
 
-### `POST /scans`
+```json
+{
+  "status": 200,
+  "message": "Success",
+  "data": {}
+}
+```
+
+- `status`: the HTTP status code, always equal to the response's real status.
+- `message`: a short human-readable result.
+- `data`: the payload. Omitted on most errors; validation errors (`400`) put the list of problems in it.
+- `error`: on errors, the HTTP error name, e.g. `Conflict`.
+- `context`: on errors, the request that failed, e.g. `POST /auth/register`.
+
+```json
+{
+  "status": 409,
+  "message": "Username is already taken",
+  "error": "Conflict",
+  "context": "POST /auth/register"
+}
+```
+
+```json
+{
+  "status": 400,
+  "message": "Validation failed",
+  "data": ["Email must be a valid email address", "Password must be at least 8 characters"],
+  "error": "Bad Request",
+  "context": "POST /auth/register"
+}
+```
+
+The examples below show `data` only.
+
+The `id` field in every payload is the row's `uid` (UUID); internal integer ids are never exposed.
+
+### Auth
+
+Every route needs a JWT (`Authorization: Bearer <token>`) unless it is public. On public routes the token is optional, but an invalid one is rejected with `401`.
+
+| Endpoint | Access | Body | `data` |
+| --- | --- | --- | --- |
+| `POST /auth/register` | Public | `userName`, `email`, `password` | `accessToken`, `tokenType`, `expiresIn`, `user` |
+| `POST /auth/login` | Public | `userNameOrEmail`, `password` | Same as register |
+| `GET /auth/me` | Logged in | | `id`, `userName`, `email`, `role` |
+
+- `userName`: 3 to 30 characters, `a-z`, `0-9`, `_`, `-`. Username and email are stored lowercase.
+- `password`: 8 to 128 characters.
+- Errors: `400` invalid body, `401` wrong credentials or token, `409` username or email already in use.
+
+### Scans and packages
+
+These endpoints are public. When a valid JWT is sent to `POST /scans`, the scan is linked to that user.
+
+#### `POST /scans`
 
 Start a scan.
 
@@ -94,7 +149,7 @@ Request:
 - `packageName`: required, must be a valid npm package name.
 - `version`: optional, exact version. Defaults to the `latest` dist-tag.
 
-Response `202 Accepted`:
+Response `202 Accepted`, `data`:
 
 ```json
 {
@@ -106,15 +161,15 @@ Response `202 Accepted`:
 }
 ```
 
+`data.status` is the scan status, not the HTTP status. `version` is `null` when none was given; the worker resolves `latest`.
+
 Errors: `400` invalid body, `401` a token was sent but is invalid, `429` rate limit exceeded.
 
-`version` is `null` in this response when none was given; the worker resolves `latest`.
-
-### `GET /scans/:id`
+#### `GET /scans/:id`
 
 Get a scan and its report.
 
-Response `200 OK` (completed):
+Response `200 OK` (completed), `data`:
 
 ```json
 {
@@ -149,11 +204,11 @@ While `queued` or `running`, `riskScore`, `riskLevel` and `completedAt` are `nul
 
 Errors: `404` scan not found.
 
-### `GET /packages/:name`
+#### `GET /packages/:name`
 
 Get a package Sentinel has scanned and the latest scan of each scanned version. Scoped names are URL-encoded (`%40scope%2Fname`).
 
-Response `200 OK`:
+Response `200 OK`, `data`:
 
 ```json
 {

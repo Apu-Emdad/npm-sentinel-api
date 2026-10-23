@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Response } from 'express';
 import { HealthController } from './health.controller.js';
 
 describe('HealthController', () => {
@@ -12,7 +13,16 @@ describe('HealthController', () => {
     healthController = module.get<HealthController>(HealthController);
   });
 
-  it('returns status ok', () => {
-    expect(healthController.check()).toEqual({ status: 'ok' });
+  it('sends status ok', () => {
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+    healthController.check(res as unknown as Response);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      status: 200,
+      message: 'API is up',
+      data: { status: 'ok' },
+    });
   });
 });

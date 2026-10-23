@@ -20,7 +20,7 @@ describe('Health (e2e)', () => {
     return request(app.getHttpServer())
       .get('/health')
       .expect(200)
-      .expect({ status: 'ok' });
+      .expect({ status: 200, message: 'API is up', data: { status: 'ok' } });
   });
 
   afterEach(async () => {

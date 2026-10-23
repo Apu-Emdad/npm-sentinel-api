@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
+import { configureApp } from './app.setup.js';
 import type { Env } from './config/env.js';
 import { SWAGGER_CUSTOM_CSS, SWAGGER_CUSTOM_JS } from './swagger/swagger-ui.js';
 
@@ -10,6 +11,7 @@ const DOCS_PATH = 'docs';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  configureApp(app);
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('npm-sentinel API')
@@ -20,6 +22,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup(DOCS_PATH, app, document, {
     jsonDocumentUrl: `${DOCS_PATH}-json`,
+    swaggerOptions: { persistAuthorization: true },
     customCss: SWAGGER_CUSTOM_CSS,
     customJsStr: SWAGGER_CUSTOM_JS,
   });
