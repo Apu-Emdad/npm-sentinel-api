@@ -54,7 +54,7 @@ describe('UsersService', () => {
     );
   });
 
-  it('getUsers builds the filter, pages and maps uid to id', async () => {
+  it('getUsers builds the filter, pages and returns the selected fields', async () => {
     prisma.user.count.mockResolvedValue(1);
     prisma.user.findMany.mockResolvedValue([selectedUser]);
 
@@ -81,12 +81,12 @@ describe('UsersService', () => {
       total: 1,
       users: [
         {
-          id: USER_UID,
+          uid: USER_UID,
           userName: 'apu_emdad',
           email: 'apu@example.com',
           isActive: true,
           createdAt: selectedUser.createdAt,
-          roleInfo: { id: 'role-uid01', name: 'USER' },
+          roleInfo: { uid: 'role-uid01', name: 'USER' },
         },
       ],
     });

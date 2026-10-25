@@ -97,7 +97,7 @@ describe('AuthService', () => {
     ).toBe(true);
     expect(data.roleInfo).toEqual({ connect: { name: 'USER' } });
     expect(auth.result.data.user).toEqual({
-      id: USER_UID,
+      uid: USER_UID,
       userName: 'apu_emdad',
       email: 'apu@example.com',
       role: 'USER',

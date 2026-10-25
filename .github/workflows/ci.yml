@@ -1,0 +1,74 @@
+# =============================================================================
+# CI PIPELINE: lint, typecheck, test, build
+# Runs on every PR and every push to main. Nothing is deployed.
+# =============================================================================
+
+name: CI
+
+# -----------------------------------------------------------------------------
+# WHEN does this workflow run?
+# -----------------------------------------------------------------------------
+on:
+  push:
+    branches: [main] # every merge/push to main
+  pull_request: # every PR
+
+# -----------------------------------------------------------------------------
+# Only one run at a time. A second run waits for the first to finish.
+# -----------------------------------------------------------------------------
+concurrency:
+  group: CI
+  cancel-in-progress: false
+
+jobs:
+  # ===========================================================================
+  # JOB: CHECK
+  # Any failing step stops the job and fails the run.
+  # ===========================================================================
+  check:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      # --- Get the code ------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # --- Prepare Yarn ------------------------------------------------------
+      # Provides Yarn 4 from package.json. Must run before setup-node.
+      - name: Enable Corepack
+        run: corepack enable
+
+      # --- Prepare Node ------------------------------------------------------
+      # Keep in sync with .nvmrc. "cache: yarn" makes installs faster.
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: yarn
+
+      # --- Install dependencies ---------------------------------------------
+      # --immutable fails if yarn.lock is out of date.
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      # --- Generate the Prisma client ---------------------------------------
+      # Not committed, but lint, typecheck and tests import it.
+      - name: Generate Prisma client
+        run: yarn prisma:generate
+
+      # --- QUALITY GATES -----------------------------------------------------
+      - name: Lint
+        run: yarn lint
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      - name: Unit tests
+        run: yarn test
+
+      - name: E2E tests
+        run: yarn test:e2e # Prisma and Redis are faked, no database needed
+
+      - name: Build
+        run: yarn build

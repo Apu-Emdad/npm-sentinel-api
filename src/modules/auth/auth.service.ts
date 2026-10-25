@@ -140,10 +140,10 @@ export class AuthService {
     };
   }
 
-  // Only safe fields leave the API: no password hash, and the uid instead of the internal id.
+  // Only safe fields leave the API: no password hash and no internal id.
   private toSafeUser(user: UserWithRole) {
     return {
-      id: user.uid,
+      uid: user.uid,
       userName: user.userName,
       email: user.email,
       role: user.roleInfo.name,
