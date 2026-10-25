@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+dist
+coverage
+src/generated
+*.tsbuildinfo
+.yarn/cache
+.yarn/install-state.gz
+.env
+.env.*
+!.env.example
+docs
+Dockerfile
+docker-compose.yml

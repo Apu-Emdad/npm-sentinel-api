@@ -113,7 +113,7 @@ Every response, success or error, has the same shape:
 
 The examples below show `data` only.
 
-The `id` field in every payload is the row's `uid`, a 10-character random id like `k3F9x2Mq7A`; internal integer ids are never exposed.
+Rows are identified by their `uid`, a 10-character random id like `k3F9x2Mq7A`, sent as `uid` in every payload; internal integer ids are never exposed.
 
 ### Auth
 
@@ -125,7 +125,7 @@ Every route needs an access token (`Authorization: Bearer <token>`) unless it is
 | `POST /auth/login` | Public | `userNameOrEmail`, `password` | Same as register |
 | `POST /auth/refresh` | Refresh cookie | | `accessToken`, `tokenType`, `expiresIn` |
 | `POST /auth/logout` | Refresh cookie | | `null` |
-| `GET /auth/me` | Logged in | | `id`, `userName`, `email`, `role` |
+| `GET /auth/me` | Logged in | | `uid`, `userName`, `email`, `role` |
 
 - `userName`: 3 to 30 characters, `a-z`, `0-9`, `_`, `-`. Username and email are stored lowercase.
 - `password`: 8 to 128 characters.
@@ -163,7 +163,7 @@ Response `202 Accepted`, `data`:
 
 ```json
 {
-  "id": "k3F9x2Mq7A",
+  "uid": "k3F9x2Mq7A",
   "status": "queued",
   "packageName": "some-package",
   "version": "1.2.3",
@@ -175,7 +175,7 @@ Response `202 Accepted`, `data`:
 
 Errors: `400` invalid body, `401` a token was sent but is invalid, `429` rate limit exceeded.
 
-#### `GET /scans/:id`
+#### `GET /scans/:uid`
 
 Get a scan and its report.
 
@@ -183,7 +183,7 @@ Response `200 OK` (completed), `data`:
 
 ```json
 {
-  "id": "k3F9x2Mq7A",
+  "uid": "k3F9x2Mq7A",
   "status": "completed",
   "packageName": "some-package",
   "version": "1.2.3",
@@ -227,7 +227,7 @@ Response `200 OK`, `data`:
     {
       "version": "1.2.3",
       "latestScan": {
-        "id": "k3F9x2Mq7A",
+        "uid": "k3F9x2Mq7A",
         "status": "completed",
         "riskScore": 82,
         "riskLevel": "high",

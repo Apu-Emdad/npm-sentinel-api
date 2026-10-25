@@ -14,6 +14,7 @@
     "start:debug": "node scripts/check-node.mjs && nest start --debug --watch",
     "start:prod": "node scripts/check-node.mjs && node dist/main",
     "lint": "oxlint --type-aware src/ test/",
+    "typecheck": "tsc --noEmit",
     "test": "node scripts/check-node.mjs && vitest run",
     "test:watch": "node scripts/check-node.mjs && vitest",
     "test:cov": "node scripts/check-node.mjs && vitest run --coverage",
@@ -21,7 +22,8 @@
     "test:e2e": "node scripts/check-node.mjs && prisma generate && vitest run --config ./vitest.config.e2e.ts",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy"
+    "migrate:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -56,6 +58,7 @@
     "prisma": "7.10.1",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.2"
