@@ -30,7 +30,7 @@ describe('HttpExceptionFilter', () => {
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
       status: 500,
-      message: 'Something went wrong',
+      message: 'An error occurred',
       error: 'boom',
       context: 'GET /things',
     });

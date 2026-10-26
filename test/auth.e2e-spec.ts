@@ -198,7 +198,7 @@ describe('Auth (e2e)', () => {
       .expect(200);
   });
 
-  it('sends unexpected errors as a 500 Result with the route message', async () => {
+  it('sends unexpected errors as a 500 Result with the generic message', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ userNameOrEmail: 'db_down', password: 'whatever-123' })
@@ -206,7 +206,7 @@ describe('Auth (e2e)', () => {
 
     expect(res.body).toEqual({
       status: 500,
-      message: 'An error occurred while logging in',
+      message: 'An error occurred',
       error: 'database is down',
       context: 'POST /auth/login',
     });
