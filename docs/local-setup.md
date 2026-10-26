@@ -33,7 +33,7 @@ yarn dev
 
 `yarn migrate:deploy` (`prisma migrate deploy`) applies the migrations in `prisma/migrations`. After changing `prisma/schema.prisma`, create a migration with `yarn migrate:dev --create-only --name <name>`, review the SQL, then apply it with `yarn migrate:dev`. `yarn dev`, `yarn build` and `yarn test:e2e` generate the Prisma client into `src/generated/prisma` first; run `yarn prisma:generate` to do it on its own (Yarn doesn't run install scripts, so it isn't generated on `yarn install`).
 
-`yarn db:seed` creates the first super admin (user name `admin`, email `admin@example.com`) with a random password and prints it once in the terminal. It does nothing if that user name or email already exists, so it is safe to run again. The password is stored only as a hash, so to get a new one, delete the user and run the seed again.
+`yarn db:seed` creates the first super admin: user name `admin`, email `admin@example.com`, password `12345678`. It does nothing if that user name or email already exists, so it is safe to run again. Change the password after the first login on any shared or hosted database.
 
 `docker compose up -d --wait postgres redis` starts only PostgreSQL and Redis (Redis stores the active refresh tokens). Data is kept in named volumes, so it survives `docker compose down`; `docker compose down -v` deletes it.
 

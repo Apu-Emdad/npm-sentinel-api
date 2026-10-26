@@ -53,7 +53,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-This starts PostgreSQL, Redis and the API, applies the database migrations and creates the first super admin (`admin`). The seed prints its random password once in the terminal. Press Ctrl+C to stop everything.
+This starts PostgreSQL, Redis and the API, applies the database migrations and creates the first super admin: user name `admin`, password `12345678`. Press Ctrl+C to stop everything.
 
 |                    | URL                            |
 | ------------------ | ------------------------------ |
@@ -61,7 +61,7 @@ This starts PostgreSQL, Redis and the API, applies the database migrations and c
 | API docs (Swagger) | `http://localhost:6000/docs`   |
 | Health check       | `http://localhost:6000/health` |
 
-The port comes from `PORT` in `.env`. Change the secrets in `.env` before using it anywhere other than your own machine.
+The port comes from `PORT` in `.env`. Change the secrets in `.env` and the super admin password before using it anywhere other than your own machine.
 
 ## Development
 
