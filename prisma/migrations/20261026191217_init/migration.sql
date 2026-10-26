@@ -1,3 +1,21 @@
+-- CreateFunction (not expressible in schema.prisma)
+-- generate_uid(size) returns a random id of `size` characters from 0-9, a-z, A-Z.
+-- pgcrypto's gen_random_bytes gives cryptographically secure randomness.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION generate_uid(size int DEFAULT 10) RETURNS text AS $$
+DECLARE
+  alphabet text := '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  bytes bytea := gen_random_bytes(size);
+  result text := '';
+BEGIN
+  FOR i IN 0..size - 1 LOOP
+    result := result || substr(alphabet, (get_byte(bytes, i) % 62) + 1, 1);
+  END LOOP;
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql VOLATILE;
+
 -- CreateEnum
 CREATE TYPE "ScanStatus" AS ENUM ('queued', 'running', 'completed', 'failed');
 
@@ -19,11 +37,11 @@ CREATE TYPE "ReviewVerdict" AS ENUM ('malicious', 'benign');
 -- CreateTable
 CREATE TABLE "roles" (
     "id" BIGSERIAL NOT NULL,
-    "uid" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "uid" TEXT NOT NULL DEFAULT generate_uid(),
     "name" TEXT NOT NULL,
-    "description" TEXT,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "role_permissions" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "roles_pkey" PRIMARY KEY ("id")
 );
@@ -31,13 +49,14 @@ CREATE TABLE "roles" (
 -- CreateTable
 CREATE TABLE "users" (
     "id" BIGSERIAL NOT NULL,
-    "uid" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "uid" TEXT NOT NULL DEFAULT generate_uid(),
     "user_name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "password_hash" TEXT NOT NULL,
     "role_id" BIGINT NOT NULL,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
@@ -45,10 +64,10 @@ CREATE TABLE "users" (
 -- CreateTable
 CREATE TABLE "packages" (
     "id" BIGSERIAL NOT NULL,
-    "uid" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "uid" TEXT NOT NULL DEFAULT generate_uid(),
     "name" TEXT NOT NULL,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "packages_pkey" PRIMARY KEY ("id")
 );
@@ -56,13 +75,13 @@ CREATE TABLE "packages" (
 -- CreateTable
 CREATE TABLE "package_versions" (
     "id" BIGSERIAL NOT NULL,
-    "uid" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "uid" TEXT NOT NULL DEFAULT generate_uid(),
     "package_id" BIGINT NOT NULL,
     "version" TEXT NOT NULL,
-    "published_at" TIMESTAMPTZ,
+    "published_at" TIMESTAMP(3),
     "tarball_url" TEXT NOT NULL,
     "integrity" TEXT,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "package_versions_pkey" PRIMARY KEY ("id")
 );
@@ -70,7 +89,7 @@ CREATE TABLE "package_versions" (
 -- CreateTable
 CREATE TABLE "scans" (
     "id" BIGSERIAL NOT NULL,
-    "uid" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "uid" TEXT NOT NULL DEFAULT generate_uid(),
     "user_id" BIGINT,
     "package_name" TEXT NOT NULL,
     "requested_version" TEXT,
@@ -81,9 +100,9 @@ CREATE TABLE "scans" (
     "error" "ScanError",
     "metadata_snapshot" JSONB,
     "analyzer_version" TEXT,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "started_at" TIMESTAMPTZ,
-    "completed_at" TIMESTAMPTZ,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "started_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
 
     CONSTRAINT "scans_pkey" PRIMARY KEY ("id")
 );
@@ -91,14 +110,14 @@ CREATE TABLE "scans" (
 -- CreateTable
 CREATE TABLE "findings" (
     "id" BIGSERIAL NOT NULL,
-    "uid" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "uid" TEXT NOT NULL DEFAULT generate_uid(),
     "scan_id" BIGINT NOT NULL,
     "check_type" "CheckType" NOT NULL,
     "severity" "Severity" NOT NULL,
     "summary" TEXT NOT NULL,
     "evidence" TEXT NOT NULL,
     "details" JSONB,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "findings_pkey" PRIMARY KEY ("id")
 );
@@ -106,14 +125,14 @@ CREATE TABLE "findings" (
 -- CreateTable
 CREATE TABLE "reviews" (
     "id" BIGSERIAL NOT NULL,
-    "uid" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "uid" TEXT NOT NULL DEFAULT generate_uid(),
     "package_version_id" BIGINT NOT NULL,
     "verdict" "ReviewVerdict" NOT NULL,
     "source" TEXT NOT NULL,
     "source_ref" TEXT,
     "notes" TEXT,
     "reviewed_by" BIGINT,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "reviews_pkey" PRIMARY KEY ("id")
 );
@@ -189,3 +208,6 @@ ALTER TABLE "reviews" ADD CONSTRAINT "reviews_package_version_id_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddCheckConstraint (not expressible in schema.prisma)
+ALTER TABLE "scans" ADD CONSTRAINT "scans_risk_score_check" CHECK ("risk_score" BETWEEN 0 AND 100);

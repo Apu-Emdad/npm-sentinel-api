@@ -1,9 +1,9 @@
 /**
  * Seed script
  *
- * Creates the first super admin (user name "admin", email "admin@example.com", password
- * "12345678"). Safe to run again: it does nothing if a user with that user name or email
- * already exists. Run it with `yarn db:seed`.
+ * Creates the roles the app needs, then the first super admin (user name "admin", email
+ * "admin@example.com", password "12345678"). Safe to run again: it creates only what is
+ * missing. Run it with `yarn db:seed`.
  */
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -21,7 +21,16 @@ async function main() {
   });
 
   try {
-    // 1. skipping when the user already exists
+    // 1. creating the roles
+    for (const name of Object.values(ROLE)) {
+      await prisma.role.upsert({
+        where: { name },
+        update: {},
+        create: { name },
+      });
+    }
+
+    // 2. skipping the super admin when the user already exists
     const existing = await prisma.user.findFirst({
       where: {
         OR: [{ userName: SUPER_ADMIN_USER_NAME }, { email: SUPER_ADMIN_EMAIL }],
@@ -36,7 +45,7 @@ async function main() {
       return;
     }
 
-    // 2. creating the super admin
+    // 3. creating the super admin
     await prisma.user.create({
       data: {
         userName: SUPER_ADMIN_USER_NAME,
