@@ -16,6 +16,7 @@ describe('validateEnv', () => {
       DATABASE_URL: validEnv.DATABASE_URL,
       REDIS_HOST: 'localhost',
       REDIS_PORT: 6380,
+      REDIS_DB: 0,
       JWT_ACCESS_SECRET: validEnv.JWT_ACCESS_SECRET,
       JWT_ACCESS_EXPIRES_IN: 900,
       JWT_REFRESH_SECRET: validEnv.JWT_REFRESH_SECRET,
@@ -34,6 +35,16 @@ describe('validateEnv', () => {
     expect(() =>
       validateEnv({ ...validEnv, DATABASE_URL: 'mysql://localhost/db' }),
     ).toThrow(/DATABASE_URL/);
+  });
+
+  it('accepts a Redis database number from 0 to 15', () => {
+    expect(validateEnv({ ...validEnv, REDIS_DB: '1' }).REDIS_DB).toBe(1);
+  });
+
+  it('rejects a Redis database number above 15', () => {
+    expect(() => validateEnv({ ...validEnv, REDIS_DB: '16' })).toThrow(
+      /REDIS_DB/,
+    );
   });
 
   it('rejects a non-numeric port', () => {

@@ -5,7 +5,7 @@ PostgreSQL, managed with Prisma. This document is the design; `prisma/schema.pri
 ## Conventions
 
 - Table and column names are `snake_case`; tables are plural. Prisma models are `PascalCase` singular and map to them with `@@map` / `@map`.
-- Every table has two ids: `id bigserial` (auto-increment primary key from Prisma's `autoincrement()`, used by foreign keys and joins) and `uid text default generate_uid()` (a unique 10-character random id from `0-9a-zA-Z`, the only id exposed by the API). `generate_uid()` is a Postgres function created in the `use_short_uids` migration (as `short_id()`) and renamed in `rename_short_id_to_generate_uid`.
+- Every table has two ids: `id bigserial` (auto-increment primary key from Prisma's `autoincrement()`, used by foreign keys and joins) and `uid text default generate_uid()` (a unique 10-character random id from `0-9a-zA-Z`, the only id exposed by the API). `generate_uid()` is a Postgres function created in the `init` migration.
 - Timestamps are `timestamp(3)` (no time zone). Prisma always stores them in UTC.
 - Fixed value sets are Postgres enums, named in `PascalCase` like their Prisma enums (no `@@map` on enums). Values that grow over time (review sources) are `text`.
 - No soft deletes.
@@ -88,7 +88,7 @@ erDiagram
 
 ### `roles`
 
-One row per role. Seeded with `USER` and `SUPER_ADMIN`; code refers to them through the `ROLE` constant (`src/common/constants/roles.ts`).
+One row per role. Created by the seed (`yarn db:seed`) with `USER` and `SUPER_ADMIN`; code refers to them through the `ROLE` constant (`src/common/constants/roles.ts`).
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |

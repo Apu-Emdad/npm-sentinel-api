@@ -33,7 +33,7 @@ yarn dev
 
 `yarn migrate:deploy` (`prisma migrate deploy`) applies the migrations in `prisma/migrations`. After changing `prisma/schema.prisma`, create a migration with `yarn migrate:dev --create-only --name <name>`, review the SQL, then apply it with `yarn migrate:dev`. `yarn dev`, `yarn build` and `yarn test:e2e` generate the Prisma client into `src/generated/prisma` first; run `yarn prisma:generate` to do it on its own (Yarn doesn't run install scripts, so it isn't generated on `yarn install`).
 
-`yarn db:seed` creates the first super admin from `SUPER_ADMIN_USER_NAME`, `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in `.env`. It does nothing if that user name or email already exists, so it is safe to run again. Change the password in `.env` before running it on a shared or hosted database.
+`yarn db:seed` creates the `USER` and `SUPER_ADMIN` roles, then the first super admin: user name `admin`, email `admin@example.com`, password `12345678`. It does nothing if that user name or email already exists, so it is safe to run again. Change the password after the first login on any shared or hosted database.
 
 `docker compose up -d --wait postgres redis` starts only PostgreSQL and Redis (Redis stores the active refresh tokens). Data is kept in named volumes, so it survives `docker compose down`; `docker compose down -v` deletes it.
 
@@ -49,6 +49,8 @@ The app validates `.env` on startup and exits with a list of the missing or inva
 | Migrations and seed (one-off) | none | `npm-sentinel-migrate` |
 
 Host ports are set in `.env` (`POSTGRES_PORT`, `REDIS_PORT`). They avoid 5432 and 6379 so they don't clash with a locally installed PostgreSQL or Redis.
+
+`REDIS_DB` is the Redis database number (0 to 15). Two apps can share one Redis server if they use different numbers, so their keys don't mix.
 
 ## Connect with DataGrip
 
