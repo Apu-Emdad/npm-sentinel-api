@@ -10,6 +10,7 @@ export class RedisService extends Redis implements OnModuleDestroy {
     super({
       host: config.get('REDIS_HOST', { infer: true }),
       port: config.get('REDIS_PORT', { infer: true }),
+      db: config.get('REDIS_DB', { infer: true }),
       lazyConnect: true,
     });
   }
