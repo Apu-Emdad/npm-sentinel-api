@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { CookieOptions, Request, Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
-import { ErrorMessage } from '../../common/decorators/error-message.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 import type { Env } from '../../config/env.js';
 import { AuthService } from './auth.service.js';
@@ -23,7 +22,6 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ErrorMessage('An error occurred while registering')
   async register(@Body() dto: RegisterDto, @Res() res: Response) {
     const { result, refreshToken, refreshExpiresIn } =
       await this.authService.register(dto);
@@ -33,7 +31,6 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  @ErrorMessage('An error occurred while logging in')
   async login(@Body() dto: LoginDto, @Res() res: Response) {
     const { result, refreshToken, refreshExpiresIn } =
       await this.authService.login(dto);
@@ -44,7 +41,6 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @ApiCookieAuth(REFRESH_COOKIE)
-  @ErrorMessage('An error occurred while refreshing the access token')
   async refresh(@Req() req: Request, @Res() res: Response) {
     const { result, refreshToken, refreshExpiresIn } =
       await this.authService.refresh(req.cookies[REFRESH_COOKIE]);
@@ -55,7 +51,6 @@ export class AuthController {
   @Public()
   @Post('logout')
   @ApiCookieAuth(REFRESH_COOKIE)
-  @ErrorMessage('An error occurred while logging out')
   async logout(@Req() req: Request, @Res() res: Response) {
     const result = await this.authService.logout(req.cookies[REFRESH_COOKIE]);
     res.clearCookie(REFRESH_COOKIE, this.cookieOptions());
@@ -64,7 +59,6 @@ export class AuthController {
 
   @Get('me')
   @ApiBearerAuth()
-  @ErrorMessage('An error occurred while fetching the current user')
   async me(@CurrentUser() authUser: AuthUser, @Res() res: Response) {
     const result = await this.authService.me(authUser.uid);
     res.status(result.status).json(result);

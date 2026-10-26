@@ -4,7 +4,7 @@ import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
-    example: 'apu_emdad',
+    example: 'admin',
     description:
       'Username or email. A value containing "@" is treated as an email.',
   })
@@ -18,7 +18,7 @@ export class LoginDto {
   })
   userNameOrEmail: string;
 
-  @ApiProperty({ example: 'correct-horse-battery' })
+  @ApiProperty({ example: '12345678' })
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
   @MaxLength(128, { message: 'Password must be at most 128 characters' })

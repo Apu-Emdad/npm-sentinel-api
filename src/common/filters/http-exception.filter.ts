@@ -8,7 +8,7 @@ import type { Request, Response } from 'express';
 import { ErrorLoggerService } from '../error-logger/error-logger.service.js';
 import type { Result } from '../interfaces/result.interface.js';
 
-const GENERIC_ERROR_MESSAGE = 'Something went wrong';
+const GENERIC_ERROR_MESSAGE = 'An error occurred';
 
 /**
  * Global error handler
