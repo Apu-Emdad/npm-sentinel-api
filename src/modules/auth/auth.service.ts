@@ -112,7 +112,7 @@ export class AuthService {
       result: {
         status: HttpStatus.OK,
         message: 'Access token refreshed',
-        data: tokens,
+        data: { ...tokens, user: this.toSafeUser(user) },
       },
     };
   }

@@ -250,6 +250,10 @@ describe('Auth (e2e)', () => {
 
       expect(res.body.message).toBe('Access token refreshed');
       expect(res.body.data.accessToken).toEqual(expect.any(String));
+      expect(res.body.data.user).toMatchObject({
+        uid: expect.any(String),
+        role: 'USER',
+      });
       expect(refreshCookieOf(res)).not.toBe(first);
       await request(app.getHttpServer())
         .get('/auth/me')
