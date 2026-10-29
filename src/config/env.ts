@@ -56,6 +56,16 @@ export class Env {
   @IsPositive()
   JWT_REFRESH_EXPIRES_IN: number = 604800;
 
+  // POST /scans allows this many requests per IP in each window
+  @IsInt()
+  @IsPositive()
+  SCAN_RATE_LIMIT: number = 10;
+
+  // Length of the POST /scans rate limit window, in seconds
+  @IsInt()
+  @IsPositive()
+  SCAN_RATE_WINDOW: number = 3600;
+
   // Origin of the web app, allowed by CORS to send the refresh cookie
   @IsUrl({ require_tld: false })
   WEB_ORIGIN: string = 'http://localhost:5173';

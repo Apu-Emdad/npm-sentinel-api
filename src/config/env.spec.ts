@@ -21,6 +21,8 @@ describe('validateEnv', () => {
       JWT_ACCESS_EXPIRES_IN: 900,
       JWT_REFRESH_SECRET: validEnv.JWT_REFRESH_SECRET,
       JWT_REFRESH_EXPIRES_IN: 604800,
+      SCAN_RATE_LIMIT: 10,
+      SCAN_RATE_WINDOW: 3600,
       WEB_ORIGIN: 'http://localhost:5173',
     });
   });
