@@ -9,8 +9,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { FakeRedis } from '../../../test/fakes/fake-redis.js';
 import type { Env } from '../../config/env.js';
-import type { PrismaService } from '../../prisma/prisma.service.js';
-import type { RedisService } from '../../redis/redis.service.js';
+import type { PrismaService } from '../../infra/prisma/prisma.service.js';
+import type { RedisService } from '../../infra/redis/redis.service.js';
 import { AuthService } from './auth.service.js';
 import { TokenService } from './token.service.js';
 

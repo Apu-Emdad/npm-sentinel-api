@@ -3,7 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service.js';
+import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import type { TokenService } from '../auth/token.service.js';
 import { UsersService } from './users.service.js';

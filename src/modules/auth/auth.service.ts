@@ -10,7 +10,7 @@ import * as argon2 from 'argon2';
 import { ROLE } from '../../common/constants/roles.js';
 import type { Result } from '../../common/interfaces/result.interface.js';
 import type { Prisma } from '../../generated/prisma/client.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
+import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthResult, JwtPayload } from './auth.types.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';

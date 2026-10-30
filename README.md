@@ -32,15 +32,15 @@ Installing a package runs code from a stranger on your machine. Typosquatted nam
 
 ## Tech stack
 
-| Area             | Tools                                            |
-| ---------------- | ------------------------------------------------ |
-| Runtime          | Node.js 24, TypeScript                           |
-| Framework        | NestJS 12                                        |
-| Database         | PostgreSQL 18, Prisma 7                          |
-| Cache and tokens | Redis 8                                          |
-| Auth             | JWT, Argon2 password hashing                     |
-| Testing          | Vitest, Supertest                                |
-| Tooling          | Yarn 4, oxlint, Prettier, GitHub Actions, Docker |
+| Area                    | Tools                                            |
+| ----------------------- | ------------------------------------------------ |
+| Runtime                 | Node.js 24, TypeScript                           |
+| Framework               | NestJS 12                                        |
+| Database                | PostgreSQL 18, Prisma 7                          |
+| Cache, tokens and queue | Redis 8, BullMQ                                  |
+| Auth                    | JWT, Argon2 password hashing                     |
+| Testing                 | Vitest, Supertest                                |
+| Tooling                 | Yarn 4, oxlint, Prettier, GitHub Actions, Docker |
 
 ## Quick start
 
@@ -53,7 +53,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-This starts PostgreSQL, Redis and the API, applies the database migrations and creates the first super admin: user name `admin`, password `12345678`. Press Ctrl+C to stop everything.
+This starts PostgreSQL, Redis, the API and the scan worker, applies the database migrations and creates the first super admin: user name `admin`, password `12345678`. Press Ctrl+C to stop everything.
 
 |                    | URL                            |
 | ------------------ | ------------------------------ |
@@ -74,14 +74,18 @@ cp .env.example .env
 docker compose up -d --wait postgres redis
 yarn migrate:deploy
 yarn db:seed
-yarn dev
+yarn dev:all
 ```
+
+`yarn dev:all` runs the API and the scan worker together in one terminal. To run them separately, use `yarn dev` and `yarn start:worker` in two terminals.
 
 ### Scripts
 
 | Command               | What it does                                           |
 | --------------------- | ------------------------------------------------------ |
 | `yarn dev`            | Start the API in watch mode                            |
+| `yarn dev:all`        | Start the API and the scan worker in watch mode        |
+| `yarn start:worker`   | Start the scan worker in watch mode                    |
 | `yarn build`          | Generate the Prisma client and compile to `dist/`      |
 | `yarn lint`           | Run oxlint                                             |
 | `yarn typecheck`      | Type-check the whole project                           |

@@ -1,5 +1,6 @@
 import { HttpStatus, NotFoundException } from '@nestjs/common';
-import type { PrismaService } from '../../prisma/prisma.service.js';
+import type { Queue } from 'bullmq';
+import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import { ScansService } from './scans.service.js';
 
@@ -14,6 +15,7 @@ describe('ScansService', () => {
       findUnique: ReturnType<typeof vi.fn>;
     };
   };
+  let scanQueue: { add: ReturnType<typeof vi.fn> };
   let scansService: ScansService;
 
   beforeEach(() => {
@@ -21,7 +23,11 @@ describe('ScansService', () => {
       user: { findUnique: vi.fn() },
       scan: { create: vi.fn(), findUnique: vi.fn() },
     };
-    scansService = new ScansService(prisma as unknown as PrismaService);
+    scanQueue = { add: vi.fn() };
+    scansService = new ScansService(
+      prisma as unknown as PrismaService,
+      scanQueue as unknown as Queue,
+    );
   });
 
   describe('createScan', () => {
@@ -55,6 +61,22 @@ describe('ScansService', () => {
         version: '1.3.0',
         createdAt: CREATED_AT,
       });
+    });
+
+    it('adds the scan to the queue', async () => {
+      prisma.scan.create.mockResolvedValue(created);
+
+      await scansService.createScan({ packageName: 'left-pad' });
+
+      expect(scanQueue.add).toHaveBeenCalledWith(
+        'scan',
+        { scanUid: 'Ab3dE5gH7j' },
+        {
+          jobId: 'Ab3dE5gH7j',
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+        },
+      );
     });
 
     it('links the scan to the logged-in user', async () => {

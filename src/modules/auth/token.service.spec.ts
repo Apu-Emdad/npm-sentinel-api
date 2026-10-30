@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { FakeRedis } from '../../../test/fakes/fake-redis.js';
 import type { Env } from '../../config/env.js';
-import type { RedisService } from '../../redis/redis.service.js';
+import type { RedisService } from '../../infra/redis/redis.service.js';
 import { TokenService } from './token.service.js';
 
 const env: Record<string, unknown> = {

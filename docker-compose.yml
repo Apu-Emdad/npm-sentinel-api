@@ -81,6 +81,28 @@ services:
       timeout: 5s
       retries: 10
 
+  # Runs scan jobs from the queue; same image as the API, no HTTP server
+  worker:
+    build:
+      context: .
+      target: runtime
+    image: npm-sentinel-api
+    container_name: npm-sentinel-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    command: ['node', 'dist/worker.main']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   postgres-data:
   redis-data:

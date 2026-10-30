@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { ROLE } from '../../common/constants/roles.js';
 import type { Env } from '../../config/env.js';
-import { RedisService } from '../../redis/redis.service.js';
+import { RedisService } from '../../infra/redis/redis.service.js';
 
 /**
  * Per-IP limit on POST /scans
