@@ -5,8 +5,8 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
-import { PrismaService } from './../src/prisma/prisma.service.js';
-import { RedisService } from './../src/redis/redis.service.js';
+import { PrismaService } from '../src/infra/prisma/prisma.service.js';
+import { RedisService } from '../src/infra/redis/redis.service.js';
 import { FakeRedis } from './fakes/fake-redis.js';
 
 type FakeUser = Record<string, any>;

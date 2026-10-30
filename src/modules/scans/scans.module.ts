@@ -6,6 +6,7 @@ import { ScansController } from './scans.controller.js';
 import { ScansService } from './scans.service.js';
 
 @Module({
+  // QUEUE: gives ScansService the scans queue to add jobs to (producer side)
   imports: [BullModule.registerQueue({ name: QUEUE.SCANS })],
   controllers: [ScansController],
   providers: [ScansService, ScanRateLimitGuard],

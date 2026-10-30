@@ -63,6 +63,7 @@ Retries:
 
 - `package_not_found` and `version_not_found` fail at once. They are answers from the registry, so trying again gives the same result.
 - `timeout` and `internal_error` may be temporary, so the scan is tried up to 3 times, waiting 5 then 10 seconds between attempts. The scan stays `running` between attempts and becomes `failed` only after the last one.
+- If the database goes down while the worker runs, the worker pauses: it takes no new jobs and checks the database every 5 seconds, then resumes once it answers. Waiting jobs keep their attempts. The worker also refuses to start while the database is down.
 
 ## Scoring
 

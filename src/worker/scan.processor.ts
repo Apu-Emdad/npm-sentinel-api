@@ -1,4 +1,5 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { setTimeout } from 'node:timers/promises';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import {
   GatewayTimeoutException,
   Logger,
@@ -8,15 +9,24 @@ import type { Job } from 'bullmq';
 import { QUEUE } from '../common/constants/queues.js';
 import { ScanError, ScanStatus } from '../generated/prisma/enums.js';
 import { RegistryService } from '../modules/packages/registry/registry.service.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { PrismaService } from '../infra/prisma/prisma.service.js';
+
+const DB_CHECK_INTERVAL_MS = 5_000;
 
 /**
- * Runs queued scans
+ * PROCESSOR: runs one scan job
+ *
+ * @Processor(QUEUE.SCANS) makes BullMQ create a Worker for the scans queue in
+ * the worker process. That Worker takes each job from Redis and calls
+ * process() below with it; this class only holds what to do with one job.
  *
  * Marks the scan running, resolves the package version from the npm registry
  * and saves the package rows. A package that does not exist fails the scan at
  * once. Any other failure is rethrown so BullMQ retries the job, and the scan
  * is set to failed with a reason only on the last attempt.
+ *
+ * If the database goes down, the worker pauses and resumes once it is back,
+ * so queued jobs don't use up their attempts during the outage.
  */
 @Processor(QUEUE.SCANS)
 export class ScanProcessor extends WorkerHost {
@@ -119,6 +129,41 @@ export class ScanProcessor extends WorkerHost {
           completedAt: new Date(),
         },
       });
+    }
+  }
+
+  /**
+   * Pauses the worker while the database is down
+   *
+   * Runs after every failed attempt. A failure may mean the database is down,
+   * so it is checked directly instead of guessing from the error. While it is
+   * down the worker takes no new jobs; it checks again every few seconds and
+   * resumes once the database answers.
+   */
+  @OnWorkerEvent('failed')
+  async pauseWhileDatabaseIsDown(): Promise<void> {
+    // checking isPaused after the await, so two failures at once pause only once
+    if ((await this.isDatabaseUp()) || this.worker.isPaused()) return;
+
+    this.logger.warn('Database is unreachable, pausing the worker');
+    await this.worker.pause(true);
+
+    while (!this.worker.closing) {
+      await setTimeout(DB_CHECK_INTERVAL_MS);
+      if (await this.isDatabaseUp()) {
+        await this.worker.resume();
+        this.logger.log('Database is back, resuming the worker');
+        return;
+      }
+    }
+  }
+
+  private async isDatabaseUp(): Promise<boolean> {
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      return true;
+    } catch {
+      return false;
     }
   }
 }

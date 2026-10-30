@@ -3,7 +3,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { Env } from '../../config/env.js';
-import { RedisService } from '../../redis/redis.service.js';
+import { RedisService } from '../../infra/redis/redis.service.js';
 import type { JwtPayload, RefreshPayload } from './auth.types.js';
 
 export interface TokenPair {

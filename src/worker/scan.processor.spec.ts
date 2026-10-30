@@ -5,8 +5,13 @@ import {
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { RegistryService } from '../modules/packages/registry/registry.service.js';
-import type { PrismaService } from '../prisma/prisma.service.js';
+import type { PrismaService } from '../infra/prisma/prisma.service.js';
 import { ScanProcessor } from './scan.processor.js';
+
+// The DB check waits between tries; resolving at once keeps the tests fast.
+vi.mock('node:timers/promises', () => ({
+  setTimeout: vi.fn().mockResolvedValue(undefined),
+}));
 
 const JOB = {
   data: { scanUid: 'Ab3dE5gH7j' },
@@ -44,6 +49,7 @@ describe('ScanProcessor', () => {
     scan: { update: ReturnType<typeof vi.fn> };
     package: { upsert: ReturnType<typeof vi.fn> };
     packageVersion: { upsert: ReturnType<typeof vi.fn> };
+    $queryRaw: ReturnType<typeof vi.fn>;
   };
   let registry: { getPackage: ReturnType<typeof vi.fn> };
   let processor: ScanProcessor;
@@ -56,6 +62,7 @@ describe('ScanProcessor', () => {
       scan: { update: vi.fn() },
       package: { upsert: vi.fn().mockResolvedValue({ id: 5n }) },
       packageVersion: { upsert: vi.fn().mockResolvedValue({ id: 9n }) },
+      $queryRaw: vi.fn(),
     };
     prisma.scan.update.mockResolvedValueOnce({
       id: 1n,
@@ -187,6 +194,69 @@ describe('ScanProcessor', () => {
     expect(lastScanUpdate()).toMatchObject({
       status: 'failed',
       error: 'internal_error',
+    });
+  });
+
+  describe('pauseWhileDatabaseIsDown', () => {
+    let worker: {
+      isPaused: ReturnType<typeof vi.fn>;
+      pause: ReturnType<typeof vi.fn>;
+      resume: ReturnType<typeof vi.fn>;
+      closing: Promise<void> | undefined;
+    };
+
+    beforeEach(() => {
+      worker = {
+        isPaused: vi.fn().mockReturnValue(false),
+        pause: vi.fn(),
+        resume: vi.fn(),
+        closing: undefined,
+      };
+      Object.assign(processor, { _worker: worker });
+      vi.spyOn(processor['logger'], 'warn').mockImplementation(() => {});
+      vi.spyOn(processor['logger'], 'log').mockImplementation(() => {});
+    });
+
+    it('does nothing when the database is up', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await processor.pauseWhileDatabaseIsDown();
+
+      expect(worker.pause).not.toHaveBeenCalled();
+    });
+
+    it('pauses while the database is down and resumes once it is back', async () => {
+      prisma.$queryRaw
+        .mockRejectedValueOnce(new Error('down'))
+        .mockRejectedValueOnce(new Error('down'))
+        .mockResolvedValueOnce([]);
+
+      await processor.pauseWhileDatabaseIsDown();
+
+      expect(worker.pause).toHaveBeenCalledWith(true);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(3);
+      expect(worker.resume).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not pause again when already paused', async () => {
+      prisma.$queryRaw.mockRejectedValue(new Error('down'));
+      worker.isPaused.mockReturnValue(true);
+
+      await processor.pauseWhileDatabaseIsDown();
+
+      expect(worker.pause).not.toHaveBeenCalled();
+    });
+
+    it('stops checking when the worker is closing', async () => {
+      prisma.$queryRaw.mockRejectedValue(new Error('down'));
+      worker.pause.mockImplementation(() => {
+        worker.closing = Promise.resolve();
+      });
+
+      await processor.pauseWhileDatabaseIsDown();
+
+      expect(worker.pause).toHaveBeenCalled();
+      expect(worker.resume).not.toHaveBeenCalled();
     });
   });
 });

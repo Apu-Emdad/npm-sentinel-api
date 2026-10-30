@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
+import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { JwtPayload } from './auth.types.js';
 
 /**

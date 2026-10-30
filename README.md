@@ -74,9 +74,10 @@ cp .env.example .env
 docker compose up -d --wait postgres redis
 yarn migrate:deploy
 yarn db:seed
-yarn dev
-yarn start:worker   # in a second terminal, runs the scans
+yarn dev:all
 ```
+
+`yarn dev:all` runs the API and the scan worker together in one terminal. To run them separately, use `yarn dev` and `yarn start:worker` in two terminals.
 
 ### Scripts
 

@@ -3,7 +3,7 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { QUEUE } from '../../common/constants/queues.js';
 import type { Result } from '../../common/interfaces/result.interface.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
+import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import { CreateScanDto } from './dto/create-scan.dto.js';
 
@@ -39,7 +39,12 @@ export class ScansService {
       },
     });
 
-    // 3. handing the scan to the worker
+    /**
+     * 3. adding a job to the scans queue (QUEUE: producer side)
+     *
+     * Saves the job in Redis under bull:scans:<scanUid>. The worker process
+     * picks it up from there; the API never runs the scan itself.
+     */
     await this.scanQueue.add(
       'scan',
       { scanUid: scan.uid },

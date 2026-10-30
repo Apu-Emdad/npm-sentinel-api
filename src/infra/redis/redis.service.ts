@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
-import type { Env } from '../config/env.js';
+import type { Env } from '../../config/env.js';
 
 // Connects lazily on the first command, so the app can boot without Redis.
 @Injectable()

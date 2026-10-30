@@ -1,6 +1,6 @@
 import { HttpStatus, NotFoundException } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import type { PrismaService } from '../../prisma/prisma.service.js';
+import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import { ScansService } from './scans.service.js';
 

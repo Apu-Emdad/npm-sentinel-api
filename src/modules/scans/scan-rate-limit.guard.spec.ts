@@ -2,7 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { ROLE } from '../../common/constants/roles.js';
 import type { Env } from '../../config/env.js';
-import type { RedisService } from '../../redis/redis.service.js';
+import type { RedisService } from '../../infra/redis/redis.service.js';
 import { ScanRateLimitGuard } from './scan-rate-limit.guard.js';
 
 const LIMIT = 3;

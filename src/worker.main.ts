@@ -3,9 +3,10 @@ import { NestFactory } from '@nestjs/core';
 import { WorkerAppModule } from './worker/worker-app.module.js';
 
 /**
- * Worker entry point
+ * WORKER: entry point of the worker process
  *
- * Starts the scan worker without an HTTP server. Shutdown hooks close the
+ * Started with `yarn start:worker` or `node dist/worker.main`, separate from
+ * the API (`main.ts`). Starts the scan worker without an HTTP server. Shutdown hooks close the
  * BullMQ worker on SIGTERM, which waits for the running job to finish.
  */
 async function bootstrap() {
