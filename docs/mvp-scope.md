@@ -59,6 +59,11 @@ Logged-in users get the same flow; their scans are linked to their account for h
 
 Failure reasons: `package_not_found`, `version_not_found`, `tarball_too_large`, `timeout`, `internal_error`.
 
+Retries:
+
+- `package_not_found` and `version_not_found` fail at once. They are answers from the registry, so trying again gives the same result.
+- `timeout` and `internal_error` may be temporary, so the scan is tried up to 3 times, waiting 5 then 10 seconds between attempts. The scan stays `running` between attempts and becomes `failed` only after the last one.
+
 ## Scoring
 
 - Each check returns zero or more findings: `{ checkType, severity, summary, evidence }`.

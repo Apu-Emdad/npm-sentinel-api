@@ -12,6 +12,7 @@ import { RolesGuard } from './modules/auth/roles.guard.js';
 import { ScansModule } from './modules/scans/scans.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { QueueModule } from './queue/queue.module.js';
 import { RedisModule } from './redis/redis.module.js';
 
 @Module({
@@ -23,6 +24,7 @@ import { RedisModule } from './redis/redis.module.js';
     }),
     PrismaModule,
     RedisModule,
+    QueueModule,
     ErrorLoggerModule,
     AuthModule,
     UsersModule,
