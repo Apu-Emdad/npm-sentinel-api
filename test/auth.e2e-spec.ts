@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { getQueueToken } from '@nestjs/bullmq';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
+import { QUEUE } from '../src/common/constants/queues.js';
 import { PrismaService } from '../src/infra/prisma/prisma.service.js';
 import { RedisService } from '../src/infra/redis/redis.service.js';
 import { FakeRedis } from './fakes/fake-redis.js';
@@ -69,6 +71,9 @@ describe('Auth (e2e)', () => {
       .useValue((fakePrisma = createFakePrisma()))
       .overrideProvider(RedisService)
       .useValue(new FakeRedis())
+      // a fake queue, so BullMQ never connects to Redis
+      .overrideProvider(getQueueToken(QUEUE.SCANS))
+      .useValue({ add: vi.fn() })
       .compile();
 
     app = moduleFixture.createNestApplication();
