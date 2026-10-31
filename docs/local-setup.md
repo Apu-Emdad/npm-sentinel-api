@@ -47,6 +47,25 @@ Or run the API and the worker together in one terminal with `yarn dev:all`. With
 
 The app validates `.env` on startup and exits with a list of the missing or invalid variables.
 
+## Email (SMTP)
+
+The API sends the verify email and reset password emails over SMTP with nodemailer, through [Brevo](https://www.brevo.com) (free plan), locally too. Set these in `.env`:
+
+| Variable | What it is |
+| --- | --- |
+| `SMTP_HOST` | `smtp-relay.brevo.com` |
+| `SMTP_PORT` | `587` (STARTTLS, default) or `465` (TLS) |
+| `SMTP_USER` | The SMTP login from Brevo |
+| `SMTP_PASS` | An SMTP key from Brevo. Keep it only in `.env`, never in `.env.example` |
+| `MAIL_FROM` | `npm-sentinel <npmsentinel@gmail.com>`. Brevo only sends from a verified sender |
+| `WEB_URL` | Base URL of the web app; the links in emails point there. Default `http://localhost:7001` |
+
+In Brevo: verify the sender under **Senders, domains and IPs**, then generate an SMTP key under **SMTP and API → SMTP**. Brevo blocks SMTP from IP addresses it doesn't know; allow yours (or turn the blocking off) under **Security → Authorized IPs**.
+
+The API starts without connecting to SMTP. If an email fails, the error is logged (never the SMTP password). Registration and forgot password still succeed; resend verification returns a 500 so the user can try again.
+
+Rate limits: forgot password and resend verification allow 5 requests per 15 minutes per email and per IP, counted in Redis. The IP is `req.ip`; behind a proxy, enable Express `trust proxy` so it is the client's IP.
+
 ## Services
 
 | Service | Host port | Container |

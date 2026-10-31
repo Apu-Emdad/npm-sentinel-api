@@ -51,6 +51,7 @@ async function main() {
         userName: SUPER_ADMIN_USER_NAME,
         email: SUPER_ADMIN_EMAIL,
         passwordHash: await argon2.hash(SUPER_ADMIN_PASSWORD),
+        emailVerifiedAt: new Date(),
         roleInfo: { connect: { name: ROLE.SUPER_ADMIN } },
       },
     });

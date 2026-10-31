@@ -7,6 +7,11 @@ import { Public } from '../../common/decorators/public.decorator.js';
 import type { Env } from '../../config/env.js';
 import { AuthService } from './auth.service.js';
 import type { AuthUser } from './auth.types.js';
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  VerifyEmailDto,
+} from './dto/email-token.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 
@@ -61,6 +66,45 @@ export class AuthController {
   @ApiBearerAuth()
   async me(@CurrentUser() authUser: AuthUser, @Res() res: Response) {
     const result = await this.authService.me(authUser.uid);
+    res.status(result.status).json(result);
+  }
+
+  @Public()
+  @Post('verify-email')
+  async verifyEmail(@Body() dto: VerifyEmailDto, @Res() res: Response) {
+    const result = await this.authService.verifyEmail(dto);
+    res.status(result.status).json(result);
+  }
+
+  @Post('resend-verification')
+  @ApiBearerAuth()
+  async resendVerification(
+    @CurrentUser() authUser: AuthUser,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const result = await this.authService.resendVerification(
+      authUser,
+      req.ip ?? '',
+    );
+    res.status(result.status).json(result);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const result = await this.authService.forgotPassword(dto, req.ip ?? '');
+    res.status(result.status).json(result);
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto, @Res() res: Response) {
+    const result = await this.authService.resetPassword(dto);
     res.status(result.status).json(result);
   }
 

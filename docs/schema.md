@@ -15,6 +15,7 @@ PostgreSQL, managed with Prisma. This document is the design; `prisma/schema.pri
 ```mermaid
 erDiagram
     roles ||--o{ users : "assigned to"
+    users ||--o{ email_tokens : "has"
     users |o--o{ scans : "starts"
     users |o--o{ reviews : "writes"
     packages ||--o{ package_versions : "has"
@@ -34,6 +35,14 @@ erDiagram
         text email UK
         text password_hash
         bigint role_id FK
+        timestamp email_verified_at
+    }
+    email_tokens {
+        bigint id PK
+        text uid UK
+        bigint user_id FK
+        EmailTokenType type
+        text token_hash UK
     }
     packages {
         bigint id PK
@@ -83,6 +92,7 @@ erDiagram
 | `Severity` | `low`, `medium`, `high` |
 | `CheckType` | `install_scripts`, `typosquatting`, `obfuscation`, `maintainer_anomaly`, `suspicious_dependency` |
 | `ReviewVerdict` | `malicious`, `benign` |
+| `EmailTokenType` | `verify_email`, `reset_password` |
 
 ## Tables
 
@@ -110,8 +120,24 @@ One row per role. Created by the seed (`yarn db:seed`) with `USER` and `SUPER_AD
 | `password_hash` | `text` | no | bcrypt or argon2 hash |
 | `role_id` | `bigint` | no | FK → `roles.id`, on delete restrict. New users get the `USER` role |
 | `is_active` | `boolean` | no | Default `true` |
+| `email_verified_at` | `timestamp(3)` | yes | When the email was verified. `null` until then. The seeded super admin starts verified |
 | `created_at` | `timestamp(3)` | no | Default `now()` |
 | `updated_at` | `timestamp(3)` | no | Updated by Prisma |
+
+### `email_tokens`
+
+One-use tokens sent in email links. The link carries 32 random bytes as hex; only their SHA-256 hash is stored.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
+| `uid` | `text` | no | Unique, default `generate_uid()` (10 characters). Never sent anywhere |
+| `user_id` | `bigint` | no | FK → `users.id`, on delete cascade. Indexed with `type` |
+| `type` | `EmailTokenType` | no | `verify_email` or `reset_password` |
+| `token_hash` | `text` | no | Unique. SHA-256 of the token, as hex |
+| `expires_at` | `timestamp(3)` | no | 24 hours after creation for `verify_email`, 30 minutes for `reset_password` |
+| `used_at` | `timestamp(3)` | yes | Set when the link is used; a used token never works again |
+| `created_at` | `timestamp(3)` | no | Default `now()` |
 
 ### `packages`
 
@@ -215,6 +241,7 @@ Constraints: unique `(package_version_id, source)`. Different sources may disagr
 - **Reviews are per version, not per package.** Malicious code is usually in specific versions, e.g. a hijacked release of a popular package. A typosquat gets one review per version.
 - **`metadata_snapshot` keeps scans reproducible.** Downloads and maintainers change over time. The snapshot records what the checks saw, so a scan can be re-analyzed later for research.
 - **`analyzer_version` separates results from different analyzer logic.** When checks or weights change, old and new scores stay comparable.
+- **Email tokens are stored hashed.** Someone who reads the database still can't use a link, the same way passwords are stored as hashes. SHA-256 is enough here (no Argon2) because the token is 32 random bytes, so it can't be guessed. Creating a token deletes the user's older unused ones of that type, so only the newest link works. Used and expired rows stay until the next token of that type replaces them.
 - **`check_type` is an enum.** Only known checks can be stored; adding a check means adding an enum value with a migration.
 
 ## How this becomes a dataset
