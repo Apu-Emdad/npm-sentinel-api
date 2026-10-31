@@ -23,7 +23,7 @@ describe('validateEnv', () => {
       JWT_REFRESH_EXPIRES_IN: 604800,
       SCAN_RATE_LIMIT: 10,
       SCAN_RATE_WINDOW: 3600,
-      WEB_ORIGIN: 'http://localhost:5173',
+      WEB_ORIGIN: 'http://localhost:7001',
     });
   });
 
