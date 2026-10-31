@@ -49,6 +49,11 @@ enum ReviewVerdict {
   benign
 }
 
+enum EmailTokenType {
+  verify_email
+  reset_password
+}
+
 model Role {
   id              BigInt   @id @default(autoincrement())
   uid             String   @unique @default(dbgenerated("generate_uid()"))
@@ -63,21 +68,39 @@ model Role {
 }
 
 model User {
-  id           BigInt   @id @default(autoincrement())
-  uid          String   @unique @default(dbgenerated("generate_uid()"))
-  userName     String   @unique @map("user_name")
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  roleId       BigInt   @map("role_id")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id              BigInt    @id @default(autoincrement())
+  uid             String    @unique @default(dbgenerated("generate_uid()"))
+  userName        String    @unique @map("user_name")
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  roleId          BigInt    @map("role_id")
+  isActive        Boolean   @default(true) @map("is_active")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  roleInfo Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  scans    Scan[]
-  reviews  Review[]
+  roleInfo    Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  scans       Scan[]
+  reviews     Review[]
+  emailTokens EmailToken[]
 
   @@map("users")
+}
+
+model EmailToken {
+  id        BigInt         @id @default(autoincrement())
+  uid       String         @unique @default(dbgenerated("generate_uid()"))
+  userId    BigInt         @map("user_id")
+  type      EmailTokenType
+  tokenHash String         @unique @map("token_hash")
+  expiresAt DateTime       @map("expires_at")
+  usedAt    DateTime?      @map("used_at")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  userInfo User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("email_tokens")
 }
 
 model Package {

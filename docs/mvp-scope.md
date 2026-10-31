@@ -27,7 +27,7 @@ Logged-in users get the same flow; their scans are linked to their account for h
 
 | Area | What is included |
 | --- | --- |
-| Auth | Optional. Register with username, email and password; login with username or email; JWT, `USER` and `SUPER_ADMIN` roles |
+| Auth | Optional. Register with username, email and password; login with username or email; JWT, `USER` and `SUPER_ADMIN` roles; optional email verification; password reset by email |
 | Scans | Public. Scan one package version per request, processed asynchronously by a worker |
 | Rate limiting | Per-IP limit on `POST /scans` |
 | Collector | Registry metadata, weekly downloads and the version tarball |
@@ -133,11 +133,24 @@ Every route needs an access token (`Authorization: Bearer <token>`) unless it is
 | `POST /auth/login` | Public | `userNameOrEmail`, `password` | Same as register |
 | `POST /auth/refresh` | Refresh cookie | | `accessToken`, `tokenType`, `expiresIn` |
 | `POST /auth/logout` | Refresh cookie | | `null` |
-| `GET /auth/me` | Logged in | | `uid`, `userName`, `email`, `role` |
+| `GET /auth/me` | Logged in | | `uid`, `userName`, `email`, `role`, `emailVerified` |
+| `POST /auth/verify-email` | Public | `token` | `null` |
+| `POST /auth/resend-verification` | Logged in | | `null` |
+| `POST /auth/forgot-password` | Public | `email` | `null` |
+| `POST /auth/reset-password` | Public | `token`, `password` | `null` |
 
 - `userName`: 3 to 30 characters, `a-z`, `0-9`, `_`, `-`. Username and email are stored lowercase.
 - `password`: 8 to 128 characters.
 - Errors: `400` invalid body, `401` wrong credentials or token, `409` username or email already in use.
+
+#### Email verification and password reset
+
+- Verifying the email is optional: unverified users can log in and use everything; the web app only shows them a banner.
+- Register sends a verify email. A failed email doesn't fail the registration; the user can resend it (`409` if already verified).
+- Links point to `WEB_URL` (`/verify-email?token=…`, `/reset-password?token=…`). A token works once; the verify link lasts 24 hours, the reset link 30 minutes. An invalid, used or expired token returns `400`.
+- Forgot password answers the same whether the email exists or not, so it can't be used to find accounts. Only active users get the email.
+- Resetting the password logs the user out everywhere (all refresh tokens are removed).
+- Forgot password and resend verification allow 5 requests per 15 minutes per email and per IP; over that, `429`.
 
 #### Access and refresh tokens
 

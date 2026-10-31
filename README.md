@@ -18,6 +18,7 @@ Installing a package runs code from a stranger on your machine. Typosquatted nam
 **Done**
 
 - Register and log in with username or email
+- Optional email verification and password reset by email (SMTP through Brevo)
 - JWT access tokens with rotating refresh tokens in an `httpOnly` cookie; a reused refresh token revokes all of the user's sessions
 - `USER` and `SUPER_ADMIN` roles, with user management for admins
 - OpenAPI docs served by the API

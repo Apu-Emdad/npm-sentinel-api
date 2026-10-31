@@ -7,29 +7,38 @@ import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
 import { QUEUE } from '../src/common/constants/queues.js';
+import { MailService } from '../src/infra/mail/mail.service.js';
 import { PrismaService } from '../src/infra/prisma/prisma.service.js';
 import { RedisService } from '../src/infra/redis/redis.service.js';
+import { createFakeEmailTokens } from './fakes/fake-email-tokens.js';
+import { FakeMailService } from './fakes/fake-mail.js';
 import { FakeRedis } from './fakes/fake-redis.js';
 
 type FakeUser = Record<string, any>;
 
-// In-memory stand-in for the Prisma user queries AuthService makes, so these tests never touch a database.
+/**
+ * In-memory stand-in for the Prisma queries the auth service makes,
+ * so these tests never touch a database.
+ */
 function createFakePrisma() {
   const users: FakeUser[] = [];
   const roleInfo = { id: 1n, uid: 'role-uid', name: 'USER' };
-  const matches = (user: FakeUser, where: Record<string, string>) =>
+  const matches = (user: FakeUser, where: Record<string, unknown>) =>
     Object.entries(where).every(([key, value]) => user[key] === value);
 
   return {
     users,
+    emailToken: createFakeEmailTokens(),
     user: {
       findFirst: async ({
         where,
       }: {
-        where: { OR: Record<string, string>[] };
+        where: { id?: { not: bigint }; OR: Record<string, string>[] };
       }) =>
-        users.find((u) =>
-          where.OR.some((condition) => matches(u, condition)),
+        users.find(
+          (u) =>
+            u.id !== where.id?.not &&
+            where.OR.some((condition) => matches(u, condition)),
         ) ?? null,
       findUnique: async ({ where }: { where: Record<string, string> }) => {
         // Lets a test simulate the database failing.
@@ -43,9 +52,23 @@ function createFakePrisma() {
           id: BigInt(users.length + 1),
           uid: randomUUID(),
           isActive: true,
+          emailVerifiedAt: null,
+          createdAt: new Date(),
           roleInfo,
         };
         users.push(user);
+        return user;
+      },
+      update: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: FakeUser;
+      }) => {
+        const user = users.find((u) => matches(u, where));
+        if (!user) throw new Error('user not found');
+        Object.assign(user, data);
         return user;
       },
     },
@@ -62,6 +85,7 @@ describe('Auth (e2e)', () => {
   };
 
   let fakePrisma: ReturnType<typeof createFakePrisma>;
+  let fakeMail: FakeMailService;
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -71,6 +95,8 @@ describe('Auth (e2e)', () => {
       .useValue((fakePrisma = createFakePrisma()))
       .overrideProvider(RedisService)
       .useValue(new FakeRedis())
+      .overrideProvider(MailService)
+      .useValue((fakeMail = new FakeMailService()))
       // a fake queue, so BullMQ never connects to Redis
       .overrideProvider(getQueueToken(QUEUE.SCANS))
       .useValue({ add: vi.fn() })
@@ -217,15 +243,15 @@ describe('Auth (e2e)', () => {
     });
   });
 
-  describe('refresh tokens', () => {
-    // The refresh cookie as the browser would send it back: "refresh_token=<value>".
-    const refreshCookieOf = (res: request.Response): string => {
-      const cookies = res.headers['set-cookie'] as unknown as string[];
-      const cookie = cookies.find((c) => c.startsWith('refresh_token='));
-      if (!cookie) throw new Error('no refresh_token cookie set');
-      return cookie.split(';')[0];
-    };
+  // The refresh cookie as the browser would send it back: "refresh_token=<value>".
+  const refreshCookieOf = (res: request.Response): string => {
+    const cookies = res.headers['set-cookie'] as unknown as string[];
+    const cookie = cookies.find((c) => c.startsWith('refresh_token='));
+    if (!cookie) throw new Error('no refresh_token cookie set');
+    return cookie.split(';')[0];
+  };
 
+  describe('refresh tokens', () => {
     const refresh = (cookie?: string) => {
       const req = request(app.getHttpServer()).post('/auth/refresh');
       return cookie ? req.set('Cookie', cookie) : req;
@@ -297,6 +323,150 @@ describe('Auth (e2e)', () => {
         .get('/auth/me')
         .set('Authorization', `Bearer ${cookie.split('=')[1]}`)
         .expect(401);
+    });
+  });
+
+  describe('email verification', () => {
+    const me = (token: string) =>
+      request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+    it('register sends a verify email and the link verifies the account once', async () => {
+      const { body } = await register().expect(201);
+      expect(body.data.user.emailVerified).toBe(false);
+      expect(fakeMail.sent).toEqual([
+        expect.objectContaining({
+          kind: 'verify-email',
+          to: 'apu@example.com',
+        }),
+      ]);
+      const token = fakeMail.lastToken('verify-email');
+
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token })
+        .expect(200);
+      expect(
+        (await me(body.data.accessToken).expect(200)).body.data,
+      ).toMatchObject({ emailVerified: true });
+
+      const again = await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token })
+        .expect(400);
+      expect(again.body.message).toBe(
+        'This verification link is invalid or has expired',
+      );
+    });
+
+    it('register still works when the email can not be sent', async () => {
+      fakeMail.fail = true;
+
+      const { body } = await register().expect(201);
+      expect(body.data.accessToken).toEqual(expect.any(String));
+    });
+
+    it('rejects a malformed token with 400', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token: 'not-a-token' })
+        .expect(400);
+    });
+
+    it('resend-verification needs a login and stops once verified', async () => {
+      const { body } = await register().expect(201);
+      const auth = `Bearer ${body.data.accessToken}`;
+
+      await request(app.getHttpServer())
+        .post('/auth/resend-verification')
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/auth/resend-verification')
+        .set('Authorization', auth)
+        .expect(200);
+      expect(fakeMail.sent).toHaveLength(2);
+
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token: fakeMail.lastToken('verify-email') })
+        .expect(200);
+      const res = await request(app.getHttpServer())
+        .post('/auth/resend-verification')
+        .set('Authorization', auth)
+        .expect(409);
+      expect(res.body.message).toBe('Email is already verified');
+    });
+  });
+
+  describe('forgot and reset password', () => {
+    const forgot = (email: string) =>
+      request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email });
+
+    it('answers the same for a known and an unknown email', async () => {
+      await register().expect(201);
+
+      const known = await forgot('APU@example.com').expect(200);
+      const unknown = await forgot('nobody@example.com').expect(200);
+
+      expect(known.body).toEqual(unknown.body);
+      expect(fakeMail.sent.filter((m) => m.kind === 'reset-password')).toEqual([
+        expect.objectContaining({ to: 'apu@example.com' }),
+      ]);
+    });
+
+    it('reset sets the new password and logs out every session', async () => {
+      const cookie = refreshCookieOf(await register().expect(201));
+      await forgot('apu@example.com').expect(200);
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({
+          token: fakeMail.lastToken('reset-password'),
+          password: 'short',
+        })
+        .expect(400);
+      await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({
+          token: fakeMail.lastToken('reset-password'),
+          password: 'brand-new-password',
+        })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookie)
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ userNameOrEmail: 'apu_emdad', password: credentials.password })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ userNameOrEmail: 'apu_emdad', password: 'brand-new-password' })
+        .expect(200);
+
+      // The link works once.
+      await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({
+          token: fakeMail.lastToken('reset-password'),
+          password: 'another-password',
+        })
+        .expect(400);
+    });
+
+    it('limits forgot-password to 5 requests in 15 minutes', async () => {
+      for (let i = 0; i < 5; i++) await forgot('apu@example.com').expect(200);
+
+      const res = await forgot('apu@example.com').expect(429);
+      expect(res.body).toMatchObject({
+        status: 429,
+        message: 'Too many reset requests. Try again in 15 minutes.',
+      });
     });
   });
 });

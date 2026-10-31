@@ -6,6 +6,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { ErrorMessageInterceptor } from './common/interceptors/error-message.interceptor.js';
 import { validateEnv } from './config/env.js';
 import { HealthController } from './health/health.controller.js';
+import { MailModule } from './infra/mail/mail.module.js';
 import { PrismaModule } from './infra/prisma/prisma.module.js';
 import { QueueModule } from './infra/queue/queue.module.js';
 import { RedisModule } from './infra/redis/redis.module.js';
@@ -24,6 +25,7 @@ import { UsersModule } from './modules/users/users.module.js';
     }),
     PrismaModule,
     RedisModule,
+    MailModule,
     QueueModule,
     ErrorLoggerModule,
     AuthModule,
