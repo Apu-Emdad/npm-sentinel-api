@@ -10,7 +10,6 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
-import { ErrorMessage } from '../../common/decorators/error-message.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import { CreateScanDto } from './dto/create-scan.dto.js';
@@ -26,7 +25,6 @@ export class ScansController {
   @Post()
   @UseGuards(ScanRateLimitGuard)
   @ApiBearerAuth()
-  @ErrorMessage('An error occurred while creating the scan')
   async createScan(
     @Body() dto: CreateScanDto,
     @CurrentUser() authUser: AuthUser | undefined,
@@ -37,7 +35,6 @@ export class ScansController {
   }
 
   @Get(':uid')
-  @ErrorMessage('An error occurred while fetching the scan')
   async getScan(@Param('uid') uid: string, @Res() res: Response) {
     const result = await this.scansService.getScan(uid);
     res.status(result.status).json(result);
