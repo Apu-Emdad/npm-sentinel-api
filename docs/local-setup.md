@@ -53,7 +53,7 @@ The app validates `.env` on startup and exits with a list of the missing or inva
 | --- | --- | --- |
 | PostgreSQL 18 | `5433` | `npm-sentinel-postgres` |
 | Redis 8 | `6381` | `npm-sentinel-redis` |
-| API | `6000` (`PORT`) | `npm-sentinel-api` |
+| API | `7000` (`PORT`) | `npm-sentinel-api` |
 | Worker | none | `npm-sentinel-worker` |
 | Migrations and seed (one-off) | none | `npm-sentinel-migrate` |
 

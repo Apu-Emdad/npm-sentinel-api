@@ -47,6 +47,8 @@ Logged-in users get the same flow; their scans are linked to their account for h
 - Review management and dataset export
 - CLI tool and GitHub Action
 - Scanning private registries or scoped packages that need auth
+- Sign in with Google or GitHub (SSO), and linking those accounts from the profile page; SSO accounts count as verified, since the provider already checked the email
+- Profile page: users view and edit their own user name, email and password; a changed email must be verified again
 
 ## Scan lifecycle
 

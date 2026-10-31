@@ -68,7 +68,7 @@ export class Env {
 
   // Origin of the web app, allowed by CORS to send the refresh cookie
   @IsUrl({ require_tld: false })
-  WEB_ORIGIN: string = 'http://localhost:5173';
+  WEB_ORIGIN: string = 'http://localhost:7001';
 }
 
 // Used by ConfigModule: throws on startup when a variable is missing or invalid.

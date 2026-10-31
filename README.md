@@ -57,9 +57,9 @@ This starts PostgreSQL, Redis, the API and the scan worker, applies the database
 
 |                    | URL                            |
 | ------------------ | ------------------------------ |
-| API                | `http://localhost:6000`        |
-| API docs (Swagger) | `http://localhost:6000/docs`   |
-| Health check       | `http://localhost:6000/health` |
+| API                | `http://localhost:7000`        |
+| API docs (Swagger) | `http://localhost:7000/docs`   |
+| Health check       | `http://localhost:7000/health` |
 
 The port comes from `PORT` in `.env`. Change the secrets in `.env` and the super admin password before using it anywhere other than your own machine.
 
