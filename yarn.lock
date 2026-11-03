@@ -4643,6 +4643,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"npm-high-impact@npm:1.13.0":
+  version: 1.13.0
+  resolution: "npm-high-impact@npm:1.13.0"
+  checksum: 10c0/20dcaadbdda6f7d14dd20d6086942d511d7e6b2a252905807c99bddab474463ddc489615abe345b77e18b3e7f65dd2b10d0a002dc1a827cb67d93eda63eacea8
+  languageName: node
+  linkType: hard
+
 "npm-sentinel-api@workspace:.":
   version: 0.0.0-use.local
   resolution: "npm-sentinel-api@workspace:."
@@ -4677,6 +4684,7 @@ __metadata:
     dotenv: "npm:^18.0.8"
     ioredis: "npm:^6.0.0"
     nodemailer: "npm:^10.3.1"
+    npm-high-impact: "npm:1.13.0"
     oxlint: "npm:^1.58.0"
     oxlint-tsgolint: "npm:^7.0.2001"
     prettier: "npm:^3.4.2"

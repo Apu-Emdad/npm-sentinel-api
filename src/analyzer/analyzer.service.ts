@@ -8,6 +8,7 @@ import type {
   CheckInput,
 } from './analyzer.types.js';
 import { installScriptsCheck } from './checks/install-scripts.check.js';
+import { typosquattingCheck } from './checks/typosquatting.check.js';
 
 /**
  * ANALYZER: runs every check on one package version
@@ -18,7 +19,7 @@ import { installScriptsCheck } from './checks/install-scripts.check.js';
 @Injectable()
 export class AnalyzerService {
   /** Every check a scan runs. New checks are added here. */
-  private readonly checks: Check[] = [installScriptsCheck];
+  private readonly checks: Check[] = [installScriptsCheck, typosquattingCheck];
 
   async analyze(input: CheckInput): Promise<AnalysisResult> {
     // 1. running the checks; any check that throws fails the scan
