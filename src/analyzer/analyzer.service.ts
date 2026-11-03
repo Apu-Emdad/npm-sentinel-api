@@ -8,6 +8,7 @@ import type {
   CheckInput,
 } from './analyzer.types.js';
 import { installScriptsCheck } from './checks/install-scripts.check.js';
+import { obfuscationCheck } from './checks/obfuscation.check.js';
 import { typosquattingCheck } from './checks/typosquatting.check.js';
 
 /**
@@ -19,7 +20,11 @@ import { typosquattingCheck } from './checks/typosquatting.check.js';
 @Injectable()
 export class AnalyzerService {
   /** Every check a scan runs. New checks are added here. */
-  private readonly checks: Check[] = [installScriptsCheck, typosquattingCheck];
+  private readonly checks: Check[] = [
+    installScriptsCheck,
+    typosquattingCheck,
+    obfuscationCheck,
+  ];
 
   async analyze(input: CheckInput): Promise<AnalysisResult> {
     // 1. running the checks; any check that throws fails the scan
