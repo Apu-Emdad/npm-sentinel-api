@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
+import type { AnalyzerService } from '../analyzer/analyzer.service.js';
 import type { RegistryService } from '../modules/packages/registry/registry.service.js';
 import type { PrismaService } from '../infra/prisma/prisma.service.js';
 import { ScanProcessor } from './scan.processor.js';
@@ -44,14 +45,32 @@ const REGISTRY_PACKAGE = {
   ],
 };
 
+const ANALYSIS = {
+  findings: [
+    {
+      checkType: 'install_scripts',
+      severity: 'medium',
+      summary: 'Runs a postinstall script on install',
+      evidence: 'node setup.js',
+      details: { script: 'postinstall' },
+    },
+  ],
+  riskScore: 25,
+  riskLevel: 'low',
+  metadataSnapshot: { version: '1.3.0' },
+};
+
 describe('ScanProcessor', () => {
   let prisma: {
     scan: { update: ReturnType<typeof vi.fn> };
     package: { upsert: ReturnType<typeof vi.fn> };
     packageVersion: { upsert: ReturnType<typeof vi.fn> };
+    finding: { createMany: ReturnType<typeof vi.fn> };
+    $transaction: ReturnType<typeof vi.fn>;
     $queryRaw: ReturnType<typeof vi.fn>;
   };
   let registry: { getPackage: ReturnType<typeof vi.fn> };
+  let analyzer: { analyze: ReturnType<typeof vi.fn> };
   let processor: ScanProcessor;
 
   // The data of the last scan update, i.e. the final state of the scan.
@@ -62,6 +81,8 @@ describe('ScanProcessor', () => {
       scan: { update: vi.fn() },
       package: { upsert: vi.fn().mockResolvedValue({ id: 5n }) },
       packageVersion: { upsert: vi.fn().mockResolvedValue({ id: 9n }) },
+      finding: { createMany: vi.fn() },
+      $transaction: vi.fn(),
       $queryRaw: vi.fn(),
     };
     prisma.scan.update.mockResolvedValueOnce({
@@ -70,9 +91,11 @@ describe('ScanProcessor', () => {
       requestedVersion: null,
     });
     registry = { getPackage: vi.fn() };
+    analyzer = { analyze: vi.fn().mockResolvedValue(ANALYSIS) };
     processor = new ScanProcessor(
       prisma as unknown as PrismaService,
       registry as unknown as RegistryService,
+      analyzer as unknown as AnalyzerService,
     );
   });
 
@@ -106,6 +129,26 @@ describe('ScanProcessor', () => {
       packageVersionId: 9n,
     });
     expect(lastScanUpdate().completedAt).toBeInstanceOf(Date);
+  });
+
+  it('saves the findings and score in one transaction', async () => {
+    registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
+
+    await processor.process(JOB);
+
+    expect(analyzer.analyze.mock.calls[0][0].registryVersion.version).toBe(
+      '1.3.0',
+    );
+    expect(prisma.finding.createMany.mock.calls[0][0].data).toEqual([
+      { scanId: 1n, ...ANALYSIS.findings[0] },
+    ]);
+    expect(lastScanUpdate()).toMatchObject({
+      riskScore: 25,
+      riskLevel: 'low',
+      metadataSnapshot: { version: '1.3.0' },
+      analyzerVersion: expect.any(String),
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it('uses the requested version', async () => {
@@ -169,6 +212,23 @@ describe('ScanProcessor', () => {
 
     await processor.process(LAST_ATTEMPT_JOB);
 
+    expect(lastScanUpdate()).toMatchObject({
+      status: 'failed',
+      error: 'timeout',
+    });
+  });
+
+  it('fails with timeout when the scan takes longer than the limit', async () => {
+    vi.useFakeTimers();
+    registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
+    analyzer.analyze.mockReturnValue(new Promise(() => {}));
+
+    const processing = processor.process(LAST_ATTEMPT_JOB);
+    await vi.advanceTimersByTimeAsync(120_000);
+    await processing;
+    vi.useRealTimers();
+
+    expect(prisma.package.upsert).not.toHaveBeenCalled();
     expect(lastScanUpdate()).toMatchObject({
       status: 'failed',
       error: 'timeout',

@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { AnalyzerModule } from '../analyzer/analyzer.module.js';
 import { QUEUE } from '../common/constants/queues.js';
 import { RegistryModule } from '../modules/packages/registry/registry.module.js';
 import { ScanProcessor } from './scan.processor.js';
@@ -12,7 +13,11 @@ import { ScanProcessor } from './scan.processor.js';
  * the worker process (WorkerAppModule), never by the API.
  */
 @Module({
-  imports: [BullModule.registerQueue({ name: QUEUE.SCANS }), RegistryModule],
+  imports: [
+    BullModule.registerQueue({ name: QUEUE.SCANS }),
+    RegistryModule,
+    AnalyzerModule,
+  ],
   providers: [ScanProcessor],
 })
 export class WorkerModule {}
