@@ -71,7 +71,9 @@ Retries:
 
 - Each check returns zero or more findings: `{ checkType, severity, summary, evidence }`.
 - Severity is `low`, `medium` or `high`.
-- A scoring function combines the findings into a score from 0 to 100. The weights are decided when checks 3 to 5 are built.
+- A scoring function combines the findings into a score from 0 to 100. Each finding adds points by severity, capped at 100. Starting weights: `low` 10, `medium` 25, `high` 50. They are tuned when checks 3 to 5 are built.
+- Each completed scan saves the `analyzer_version` that produced it, and a `metadata_snapshot` of the registry facts the checks saw.
+- The registry fetch and the analysis must finish within 120 seconds, or the attempt fails with `timeout` and is retried.
 - Risk level from the score (initial values, to be tuned with real data):
 
 | Score | Level |

@@ -6,9 +6,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
+import {
+  ANALYZER_VERSION,
+  SCAN_TIMEOUT_MS,
+} from '../analyzer/analyzer.constants.js';
+import { AnalyzerService } from '../analyzer/analyzer.service.js';
+import type { AnalysisResult } from '../analyzer/analyzer.types.js';
 import { QUEUE } from '../common/constants/queues.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { ScanError, ScanStatus } from '../generated/prisma/enums.js';
 import { RegistryService } from '../modules/packages/registry/registry.service.js';
+import type {
+  RegistryPackage,
+  RegistryVersion,
+} from '../modules/packages/registry/registry.types.js';
 import { PrismaService } from '../infra/prisma/prisma.service.js';
 
 const DB_CHECK_INTERVAL_MS = 5_000;
@@ -20,10 +31,12 @@ const DB_CHECK_INTERVAL_MS = 5_000;
  * the worker process. That Worker takes each job from Redis and calls
  * process() below with it; this class only holds what to do with one job.
  *
- * Marks the scan running, resolves the package version from the npm registry
- * and saves the package rows. A package that does not exist fails the scan at
- * once. Any other failure is rethrown so BullMQ retries the job, and the scan
- * is set to failed with a reason only on the last attempt.
+ * Marks the scan running, resolves the package version from the npm registry,
+ * runs the analyzer, then saves the package rows, findings and score. The
+ * fetch and analysis must finish within SCAN_TIMEOUT_MS. A package that does
+ * not exist fails the scan at once. Any other failure is rethrown so BullMQ
+ * retries the job, and the scan is set to failed with a reason only on the
+ * last attempt.
  *
  * If the database goes down, the worker pauses and resumes once it is back,
  * so queued jobs don't use up their attempts during the outage.
@@ -35,6 +48,7 @@ export class ScanProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly registry: RegistryService,
+    private readonly analyzer: AnalyzerService,
   ) {
     super();
   }
@@ -48,61 +62,25 @@ export class ScanProcessor extends WorkerHost {
     });
 
     try {
-      // 2. resolving the version: the requested one, or the latest dist-tag
-      const registryPackage = await this.registry.getPackage(scan.packageName);
-      const version = scan.requestedVersion ?? registryPackage.distTags.latest;
-      const registryVersion = registryPackage.versions.find(
-        (item) => item.version === version,
+      // 2. fetching and analyzing within the time limit; nothing is saved until this is done
+      const analyzed = await this.withTimeout(
+        this.fetchAndAnalyze(scan),
+        SCAN_TIMEOUT_MS,
       );
 
-      if (!registryVersion) {
-        await this.prisma.scan.update({
-          where: { id: scan.id },
-          data: {
-            status: ScanStatus.failed,
-            error: ScanError.version_not_found,
-            completedAt: new Date(),
-          },
-        });
+      if (!analyzed) {
+        await this.failScan(scan.id, ScanError.version_not_found);
         return;
       }
 
-      // 3. saving the package and version rows, only now that the registry confirmed them
-      const packageRow = await this.prisma.package.upsert({
-        where: { name: registryPackage.name },
-        update: {},
-        create: { name: registryPackage.name },
-        select: { id: true },
-      });
-      const versionRow = await this.prisma.packageVersion.upsert({
-        where: {
-          packageId_version: {
-            packageId: packageRow.id,
-            version: registryVersion.version,
-          },
-        },
-        update: {},
-        create: {
-          packageId: packageRow.id,
-          version: registryVersion.version,
-          publishedAt: registryVersion.publishedAt
-            ? new Date(registryVersion.publishedAt)
-            : null,
-          tarballUrl: registryVersion.tarballUrl ?? '',
-          integrity: registryVersion.integrity,
-        },
-        select: { id: true },
-      });
+      // 3. saving the package and version, only now that the registry confirmed them
+      const versionId = await this.saveVersion(
+        analyzed.registryPackage,
+        analyzed.registryVersion,
+      );
 
-      // 4. completing the scan; the analyzer (#23) will add the score later
-      await this.prisma.scan.update({
-        where: { id: scan.id },
-        data: {
-          status: ScanStatus.completed,
-          packageVersionId: versionRow.id,
-          completedAt: new Date(),
-        },
-      });
+      // 4. saving the findings and the score
+      await this.completeScan(scan.id, versionId, analyzed.result);
     } catch (error) {
       const reason =
         error instanceof NotFoundException
@@ -121,15 +99,129 @@ export class ScanProcessor extends WorkerHost {
         throw error;
       }
 
-      await this.prisma.scan.update({
-        where: { id: scan.id },
+      await this.failScan(scan.id, reason);
+    }
+  }
+
+  /**
+   * Gets the package from the registry and runs the analyzer on the version
+   *
+   * Uses the requested version, or the latest one. Returns null when that
+   * version does not exist. Only reads, so it is safe to abandon on timeout.
+   */
+  private async fetchAndAnalyze(scan: {
+    packageName: string;
+    requestedVersion: string | null;
+  }) {
+    const registryPackage = await this.registry.getPackage(scan.packageName);
+    const version = scan.requestedVersion ?? registryPackage.distTags.latest;
+    const registryVersion = registryPackage.versions.find(
+      (item) => item.version === version,
+    );
+
+    if (!registryVersion) return null;
+
+    const result = await this.analyzer.analyze({
+      registryPackage,
+      registryVersion,
+    });
+    return { registryPackage, registryVersion, result };
+  }
+
+  /** Saves the package and version rows if they are new, and returns the version id. */
+  private async saveVersion(
+    registryPackage: RegistryPackage,
+    registryVersion: RegistryVersion,
+  ): Promise<bigint> {
+    const packageRow = await this.prisma.package.upsert({
+      where: { name: registryPackage.name },
+      update: {},
+      create: { name: registryPackage.name },
+      select: { id: true },
+    });
+
+    const versionRow = await this.prisma.packageVersion.upsert({
+      where: {
+        packageId_version: {
+          packageId: packageRow.id,
+          version: registryVersion.version,
+        },
+      },
+      update: {},
+      create: {
+        packageId: packageRow.id,
+        version: registryVersion.version,
+        publishedAt: registryVersion.publishedAt
+          ? new Date(registryVersion.publishedAt)
+          : null,
+        tarballUrl: registryVersion.tarballUrl ?? '',
+        integrity: registryVersion.integrity,
+      },
+      select: { id: true },
+    });
+
+    return versionRow.id;
+  }
+
+  /** Saves the findings and completes the scan together, so a retry never finds half a result. */
+  private async completeScan(
+    scanId: bigint,
+    versionId: bigint,
+    result: AnalysisResult,
+  ): Promise<void> {
+    const findings = result.findings.map((finding) => ({
+      scanId,
+      checkType: finding.checkType,
+      severity: finding.severity,
+      summary: finding.summary,
+      evidence: finding.evidence,
+      details: finding.details as Prisma.InputJsonValue | undefined,
+    }));
+
+    await this.prisma.$transaction([
+      this.prisma.finding.createMany({ data: findings }),
+      this.prisma.scan.update({
+        where: { id: scanId },
         data: {
-          status: ScanStatus.failed,
-          error: reason,
+          status: ScanStatus.completed,
+          packageVersionId: versionId,
+          riskScore: result.riskScore,
+          riskLevel: result.riskLevel,
+          metadataSnapshot: result.metadataSnapshot as Prisma.InputJsonValue,
+          analyzerVersion: ANALYZER_VERSION,
           completedAt: new Date(),
         },
-      });
-    }
+      }),
+    ]);
+  }
+
+  private async failScan(scanId: bigint, reason: ScanError): Promise<void> {
+    await this.prisma.scan.update({
+      where: { id: scanId },
+      data: {
+        status: ScanStatus.failed,
+        error: reason,
+        completedAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Rejects with a GatewayTimeoutException when the promise takes longer than `ms`
+   *
+   * The work itself is not stopped, so only wrap work that has no side effects.
+   * Uses the global setTimeout, since the one imported above only waits.
+   */
+  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = globalThis.setTimeout(
+        () => reject(new GatewayTimeoutException('Scan timed out')),
+        ms,
+      );
+    });
+
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
   }
 
   /**
