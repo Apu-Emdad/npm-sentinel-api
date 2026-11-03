@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   GatewayTimeoutException,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { AnalyzerService } from '../analyzer/analyzer.service.js';
@@ -45,6 +46,10 @@ const REGISTRY_PACKAGE = {
   ],
 };
 
+const FILES = [
+  { path: 'index.js', content: Buffer.from('module.exports = 1') },
+];
+
 const ANALYSIS = {
   findings: [
     {
@@ -69,7 +74,10 @@ describe('ScanProcessor', () => {
     $transaction: ReturnType<typeof vi.fn>;
     $queryRaw: ReturnType<typeof vi.fn>;
   };
-  let registry: { getPackage: ReturnType<typeof vi.fn> };
+  let registry: {
+    getPackage: ReturnType<typeof vi.fn>;
+    getFiles: ReturnType<typeof vi.fn>;
+  };
   let analyzer: { analyze: ReturnType<typeof vi.fn> };
   let processor: ScanProcessor;
 
@@ -90,7 +98,10 @@ describe('ScanProcessor', () => {
       packageName: 'left-pad',
       requestedVersion: null,
     });
-    registry = { getPackage: vi.fn() };
+    registry = {
+      getPackage: vi.fn(),
+      getFiles: vi.fn().mockResolvedValue(FILES),
+    };
     analyzer = { analyze: vi.fn().mockResolvedValue(ANALYSIS) };
     processor = new ScanProcessor(
       prisma as unknown as PrismaService,
@@ -139,6 +150,7 @@ describe('ScanProcessor', () => {
     expect(analyzer.analyze.mock.calls[0][0].registryVersion.version).toBe(
       '1.3.0',
     );
+    expect(analyzer.analyze.mock.calls[0][0].files).toBe(FILES);
     expect(prisma.finding.createMany.mock.calls[0][0].data).toEqual([
       { scanId: 1n, ...ANALYSIS.findings[0] },
     ]);
@@ -194,6 +206,30 @@ describe('ScanProcessor', () => {
     expect(lastScanUpdate()).toMatchObject({
       status: 'failed',
       error: 'package_not_found',
+    });
+  });
+
+  it('downloads the files of the scanned version', async () => {
+    registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
+
+    await processor.process(JOB);
+
+    expect(registry.getFiles).toHaveBeenCalledWith(
+      'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz',
+      'left-pad',
+    );
+  });
+
+  it('fails with tarball_too_large at once, without a retry', async () => {
+    registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
+    registry.getFiles.mockRejectedValue(new PayloadTooLargeException());
+
+    await processor.process(JOB);
+
+    expect(prisma.package.upsert).not.toHaveBeenCalled();
+    expect(lastScanUpdate()).toMatchObject({
+      status: 'failed',
+      error: 'tarball_too_large',
     });
   });
 
