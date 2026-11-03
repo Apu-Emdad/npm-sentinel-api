@@ -4,14 +4,16 @@ import type {
   Severity,
 } from '../generated/prisma/enums.js';
 import type {
+  PackageFile,
   RegistryPackage,
   RegistryVersion,
 } from '../modules/packages/registry/registry.types.js';
 
-/** What every check gets: the package and the version being scanned. */
+/** What every check gets: the package, the version being scanned and its files. */
 export interface CheckInput {
   registryPackage: RegistryPackage;
   registryVersion: RegistryVersion;
+  files: PackageFile[];
 }
 
 /** One problem a check found, with the evidence that triggered it. */

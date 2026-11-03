@@ -28,6 +28,12 @@ export interface RegistryPackage {
   versions: RegistryVersion[];
 }
 
+/** One file from a version tarball; the path has no `package/` prefix. */
+export interface PackageFile {
+  path: string;
+  content: Buffer;
+}
+
 export interface RegistryDownloads {
   downloads: number;
   start: string;

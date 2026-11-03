@@ -4,6 +4,7 @@ import {
   GatewayTimeoutException,
   Logger,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import {
@@ -32,9 +33,10 @@ const DB_CHECK_INTERVAL_MS = 5_000;
  * process() below with it; this class only holds what to do with one job.
  *
  * Marks the scan running, resolves the package version from the npm registry,
- * runs the analyzer, then saves the package rows, findings and score. The
- * fetch and analysis must finish within SCAN_TIMEOUT_MS. A package that does
- * not exist fails the scan at once. Any other failure is rethrown so BullMQ
+ * downloads its files, runs the analyzer, then saves the package rows,
+ * findings and score. The fetch and analysis must finish within
+ * SCAN_TIMEOUT_MS. A package that does not exist, or a tarball that is too
+ * large, fails the scan at once. Any other failure is rethrown so BullMQ
  * retries the job, and the scan is set to failed with a reason only on the
  * last attempt.
  *
@@ -85,9 +87,11 @@ export class ScanProcessor extends WorkerHost {
       const reason =
         error instanceof NotFoundException
           ? ScanError.package_not_found
-          : error instanceof GatewayTimeoutException
-            ? ScanError.timeout
-            : ScanError.internal_error;
+          : error instanceof PayloadTooLargeException
+            ? ScanError.tarball_too_large
+            : error instanceof GatewayTimeoutException
+              ? ScanError.timeout
+              : ScanError.internal_error;
 
       if (reason === ScanError.internal_error) {
         this.logger.error(`Scan ${job.data.scanUid} failed`, error);
@@ -95,7 +99,10 @@ export class ScanProcessor extends WorkerHost {
 
       // 5. rethrowing temporary failures so BullMQ retries; only the last attempt fails the scan
       const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-      if (reason !== ScanError.package_not_found && !isLastAttempt) {
+      const isPermanent =
+        reason === ScanError.package_not_found ||
+        reason === ScanError.tarball_too_large;
+      if (!isPermanent && !isLastAttempt) {
         throw error;
       }
 
@@ -107,7 +114,8 @@ export class ScanProcessor extends WorkerHost {
    * Gets the package from the registry and runs the analyzer on the version
    *
    * Uses the requested version, or the latest one. Returns null when that
-   * version does not exist. Only reads, so it is safe to abandon on timeout.
+   * version does not exist. The version's files are held in memory only and
+   * dropped when the scan ends. Only reads, so it is safe to abandon on timeout.
    */
   private async fetchAndAnalyze(scan: {
     packageName: string;
@@ -119,11 +127,16 @@ export class ScanProcessor extends WorkerHost {
       (item) => item.version === version,
     );
 
-    if (!registryVersion) return null;
+    if (!registryVersion?.tarballUrl) return null;
 
+    const files = await this.registry.getFiles(
+      registryVersion.tarballUrl,
+      scan.packageName,
+    );
     const result = await this.analyzer.analyze({
       registryPackage,
       registryVersion,
+      files,
     });
     return { registryPackage, registryVersion, result };
   }

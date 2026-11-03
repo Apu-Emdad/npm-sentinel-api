@@ -3,11 +3,25 @@ import {
   GatewayTimeoutException,
   HttpException,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
+import { buffer } from 'node:stream/consumers';
+import { gzipSync } from 'node:zlib';
+import { pack, type Header } from 'tar-stream';
 import { RegistryService } from './registry.service.js';
 
 const jsonResponse = (data: unknown, status = 200) => ({ data, status });
+
+// Builds a gzipped tarball in memory, the same shape npm serves.
+const createTarball = async (
+  entries: { header: Partial<Header> & { name: string }; content?: string }[],
+) => {
+  const tar = pack();
+  for (const { header, content } of entries) tar.entry(header, content ?? '');
+  tar.finalize();
+  return gzipSync(await buffer(tar));
+};
 
 const PACKUMENT = {
   name: 'left-pad',
@@ -157,6 +171,92 @@ describe('RegistryService', () => {
       await expect(registryService.getPackage('left-pad')).rejects.toThrow(
         BadGatewayException,
       );
+    });
+  });
+
+  describe('getFiles', () => {
+    const TARBALL_URL =
+      'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz';
+
+    it('returns the files without the package/ folder', async () => {
+      getMock.mockResolvedValue(
+        jsonResponse(
+          await createTarball([
+            {
+              header: { name: 'package/index.js' },
+              content: 'module.exports = 1',
+            },
+            { header: { name: 'package/lib/a.js' }, content: 'a' },
+          ]),
+        ),
+      );
+
+      const files = await registryService.getFiles(TARBALL_URL, 'left-pad');
+
+      expect(files.map((file) => [file.path, file.content.toString()])).toEqual(
+        [
+          ['index.js', 'module.exports = 1'],
+          ['lib/a.js', 'a'],
+        ],
+      );
+      expect(getMock.mock.calls[0][1]).toMatchObject({
+        responseType: 'arraybuffer',
+        maxContentLength: 50 * 1024 * 1024,
+      });
+    });
+
+    it('skips symlinks, folders and unsafe paths', async () => {
+      getMock.mockResolvedValue(
+        jsonResponse(
+          await createTarball([
+            { header: { name: 'package/ok.js' }, content: 'ok' },
+            {
+              header: {
+                name: 'package/link',
+                type: 'symlink',
+                linkname: '/etc/passwd',
+              },
+            },
+            { header: { name: 'package/dir', type: 'directory' } },
+            { header: { name: 'package/../../evil.js' }, content: 'evil' },
+            { header: { name: '/abs/evil.js' }, content: 'evil' },
+          ]),
+        ),
+      );
+
+      const files = await registryService.getFiles(TARBALL_URL, 'left-pad');
+
+      expect(files.map((file) => file.path)).toEqual(['ok.js']);
+    });
+
+    it('throws PayloadTooLargeException when the download is too large', async () => {
+      getMock.mockRejectedValue(
+        new AxiosError(
+          'maxContentLength size of 52428800 exceeded',
+          'ERR_BAD_RESPONSE',
+        ),
+      );
+
+      await expect(
+        registryService.getFiles(TARBALL_URL, 'left-pad'),
+      ).rejects.toThrow(PayloadTooLargeException);
+    });
+
+    it('throws PayloadTooLargeException when the unzipped tarball is too large', async () => {
+      const huge = gzipSync(Buffer.alloc(201 * 1024 * 1024));
+      getMock.mockResolvedValue(jsonResponse(huge));
+
+      await expect(
+        registryService.getFiles(TARBALL_URL, 'left-pad'),
+      ).rejects.toThrow(PayloadTooLargeException);
+    });
+
+    it('throws NotFoundException when the tarball is missing', async () => {
+      getMock.mockResolvedValue(jsonResponse(Buffer.alloc(0), 404));
+
+      await expect(
+        registryService.getFiles(TARBALL_URL, 'left-pad'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

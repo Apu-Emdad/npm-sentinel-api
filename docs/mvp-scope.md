@@ -10,9 +10,9 @@ Everything not needed for that is out of the MVP.
 
 Package code is never executed. The analyzer only reads files and registry metadata.
 
-- Tarballs are downloaded and extracted inside a throwaway container with no network access.
+- Tarballs are downloaded and unpacked in memory only, never written to disk. Symlinks and unsafe paths (absolute or containing `..`) are skipped, and the unpacked size is capped.
 - No `npm install`, no `require`/`import` of package files, no lifecycle scripts.
-- The extracted files are deleted when the scan ends.
+- The files are dropped from memory when the scan ends.
 
 ## User flow
 
@@ -269,7 +269,7 @@ Initial values, adjustable through config:
 
 | Limit | Value |
 | --- | --- |
-| Max tarball size | 50 MB |
+| Max tarball size | 50 MB (200 MB unpacked) |
 | Scan timeout | 120 seconds |
 | Scans per IP | 10 per hour |
 
