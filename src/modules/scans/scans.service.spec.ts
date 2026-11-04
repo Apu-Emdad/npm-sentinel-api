@@ -1,11 +1,12 @@
 import { HttpStatus, NotFoundException } from '@nestjs/common';
 import type { Queue } from 'bullmq';
+import dayjs from 'dayjs';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import { ScansService } from './scans.service.js';
 
 const USER: AuthUser = { uid: 'k3F9x2Mq7A', userName: 'apu', role: 'USER' };
-const CREATED_AT = new Date('2026-10-28T10:00:00Z');
+const CREATED_AT = dayjs('2026-10-28T10:00:00Z').toDate();
 
 describe('ScansService', () => {
   let prisma: {

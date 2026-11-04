@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
+import dayjs from 'dayjs';
 import { createFakeEmailTokens } from '../../../test/fakes/fake-email-tokens.js';
 import { FakeMailService } from '../../../test/fakes/fake-mail.js';
 import { FakeRedis } from '../../../test/fakes/fake-redis.js';
@@ -41,15 +42,15 @@ async function makeUser(password: string) {
     roleId: 1n,
     isActive: true,
     emailVerifiedAt: null as Date | null,
-    createdAt: new Date('2026-10-01T00:00:00Z'),
-    updatedAt: new Date(),
+    createdAt: dayjs('2026-10-01T00:00:00Z').toDate(),
+    updatedAt: dayjs().toDate(),
     roleInfo: {
       id: 1n,
       uid: 'role-uid',
       name: 'USER',
       rolePermissions: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: dayjs().toDate(),
+      updatedAt: dayjs().toDate(),
     },
   };
 }
@@ -290,7 +291,7 @@ describe('AuthService', () => {
 
       prisma.user.findUnique.mockResolvedValueOnce({
         ...(await makeUser('unused')),
-        emailVerifiedAt: new Date(),
+        emailVerifiedAt: dayjs().toDate(),
       });
       await expect(
         authService.resendVerification(

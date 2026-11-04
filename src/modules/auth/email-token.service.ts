@@ -68,14 +68,14 @@ export class EmailTokenService {
       select: { id: true, userId: true, type: true, expiresAt: true },
     });
 
-    if (!row || row.type !== type || row.expiresAt < new Date()) {
+    if (!row || row.type !== type || dayjs().isAfter(row.expiresAt)) {
       throw new BadRequestException(INVALID_TOKEN_MESSAGE[type]);
     }
 
     // Only one request can mark the token used, so two clicks at once can't both pass.
     const { count } = await this.prisma.emailToken.updateMany({
       where: { id: row.id, usedAt: null },
-      data: { usedAt: new Date() },
+      data: { usedAt: dayjs().toDate() },
     });
     if (count === 0) {
       throw new BadRequestException(INVALID_TOKEN_MESSAGE[type]);

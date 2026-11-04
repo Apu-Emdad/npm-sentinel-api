@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
+import dayjs from 'dayjs';
 import { ROLE } from '../../common/constants/roles.js';
 import type { Result } from '../../common/interfaces/result.interface.js';
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -171,7 +172,7 @@ export class AuthService {
     // 2. marking the email verified
     await this.prisma.user.update({
       where: { id: userId },
-      data: { emailVerifiedAt: new Date() },
+      data: { emailVerifiedAt: dayjs().toDate() },
     });
 
     return { status: HttpStatus.OK, message: 'Email verified successfully' };
