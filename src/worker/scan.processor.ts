@@ -129,16 +129,33 @@ export class ScanProcessor extends WorkerHost {
 
     if (!registryVersion?.tarballUrl) return null;
 
-    const files = await this.registry.getFiles(
-      registryVersion.tarballUrl,
-      scan.packageName,
-    );
+    const [files, weeklyDownloads] = await Promise.all([
+      this.registry.getFiles(registryVersion.tarballUrl, scan.packageName),
+      this.getWeeklyDownloads(scan.packageName),
+    ]);
     const result = await this.analyzer.analyze({
       registryPackage,
       registryVersion,
       files,
+      weeklyDownloads,
     });
     return { registryPackage, registryVersion, result };
+  }
+
+  /**
+   * Last week's downloads of the package
+   *
+   * Returns 0 when npm has no download stats for it yet, which happens to
+   * packages published in the last day or so. Returns null when the stats
+   * could not be fetched, since they alone should not fail the scan.
+   */
+  private async getWeeklyDownloads(name: string): Promise<number | null> {
+    return this.registry
+      .getWeeklyDownloads(name)
+      .then((stats) => stats.downloads)
+      .catch((error: unknown) =>
+        error instanceof NotFoundException ? 0 : null,
+      );
   }
 
   /** Saves the package and version rows if they are new, and returns the version id. */

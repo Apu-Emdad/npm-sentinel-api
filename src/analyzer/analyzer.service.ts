@@ -8,6 +8,7 @@ import type {
   CheckInput,
 } from './analyzer.types.js';
 import { installScriptsCheck } from './checks/install-scripts.check.js';
+import { maintainerAnomalyCheck } from './checks/maintainer-anomaly.check.js';
 import { obfuscationCheck } from './checks/obfuscation.check.js';
 import { typosquattingCheck } from './checks/typosquatting.check.js';
 
@@ -24,6 +25,7 @@ export class AnalyzerService {
     installScriptsCheck,
     typosquattingCheck,
     obfuscationCheck,
+    maintainerAnomalyCheck,
   ];
 
   async analyze(input: CheckInput): Promise<AnalysisResult> {
@@ -62,7 +64,7 @@ export class AnalyzerService {
   }
 
   /** The registry facts the checks saw, saved with the scan. */
-  private getSnapshot({ registryVersion }: CheckInput) {
+  private getSnapshot({ registryVersion, weeklyDownloads }: CheckInput) {
     return {
       version: registryVersion.version,
       publishedAt: registryVersion.publishedAt,
@@ -73,6 +75,7 @@ export class AnalyzerService {
       optionalDependencies: registryVersion.optionalDependencies,
       peerDependencies: registryVersion.peerDependencies,
       unpackedSize: registryVersion.unpackedSize,
+      weeklyDownloads,
     };
   }
 }

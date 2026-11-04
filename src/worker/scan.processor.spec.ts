@@ -77,6 +77,7 @@ describe('ScanProcessor', () => {
   let registry: {
     getPackage: ReturnType<typeof vi.fn>;
     getFiles: ReturnType<typeof vi.fn>;
+    getWeeklyDownloads: ReturnType<typeof vi.fn>;
   };
   let analyzer: { analyze: ReturnType<typeof vi.fn> };
   let processor: ScanProcessor;
@@ -101,6 +102,7 @@ describe('ScanProcessor', () => {
     registry = {
       getPackage: vi.fn(),
       getFiles: vi.fn().mockResolvedValue(FILES),
+      getWeeklyDownloads: vi.fn().mockResolvedValue({ downloads: 1234 }),
     };
     analyzer = { analyze: vi.fn().mockResolvedValue(ANALYSIS) };
     processor = new ScanProcessor(
@@ -219,6 +221,27 @@ describe('ScanProcessor', () => {
       'left-pad',
     );
   });
+
+  it.each([
+    ['the stats', { downloads: 1234 }, 1234],
+    ['0 when npm has no stats yet', new NotFoundException(), 0],
+    ['null when the stats cannot be fetched', new BadGatewayException(), null],
+  ])(
+    'passes the weekly downloads to the analyzer: %s',
+    async (_, response, expected) => {
+      registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
+      if (response instanceof Error) {
+        registry.getWeeklyDownloads.mockRejectedValue(response);
+      } else {
+        registry.getWeeklyDownloads.mockResolvedValue(response);
+      }
+
+      await processor.process(JOB);
+
+      expect(analyzer.analyze.mock.calls[0][0].weeklyDownloads).toBe(expected);
+      expect(lastScanUpdate().status).toBe('completed');
+    },
+  );
 
   it('fails with tarball_too_large at once, without a retry', async () => {
     registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);

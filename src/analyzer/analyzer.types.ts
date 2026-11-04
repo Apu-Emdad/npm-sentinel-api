@@ -9,11 +9,13 @@ import type {
   RegistryVersion,
 } from '../modules/packages/registry/registry.types.js';
 
-/** What every check gets: the package, the version being scanned and its files. */
+/** What every check gets: the package, the version being scanned, its files and downloads. */
 export interface CheckInput {
   registryPackage: RegistryPackage;
   registryVersion: RegistryVersion;
   files: PackageFile[];
+  /** Last week's downloads, or null when npm's stats could not be fetched. */
+  weeklyDownloads: number | null;
 }
 
 /** One problem a check found, with the evidence that triggered it. */
