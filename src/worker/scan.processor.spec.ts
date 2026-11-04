@@ -244,6 +244,42 @@ describe('ScanProcessor', () => {
     },
   );
 
+  it('passes the stats of unknown dependencies to the analyzer', async () => {
+    const latest = {
+      ...REGISTRY_PACKAGE.versions[1],
+      dependencies: { lodash: '^4.17.21', 'my-helper': '^1.0.0' },
+    };
+    registry.getPackage
+      .mockResolvedValueOnce({ ...REGISTRY_PACKAGE, versions: [latest] })
+      .mockResolvedValueOnce({ createdAt: '2026-11-01T00:00:00.000Z' });
+
+    await processor.process(JOB);
+
+    expect(registry.getPackage).toHaveBeenLastCalledWith('my-helper');
+    expect(analyzer.analyze.mock.calls[0][0].dependencyStats).toEqual([
+      {
+        name: 'my-helper',
+        createdAt: '2026-11-01T00:00:00.000Z',
+        weeklyDownloads: 1234,
+      },
+    ]);
+  });
+
+  it('leaves out a dependency that cannot be fetched', async () => {
+    const latest = {
+      ...REGISTRY_PACKAGE.versions[1],
+      dependencies: { 'my-helper': '^1.0.0' },
+    };
+    registry.getPackage
+      .mockResolvedValueOnce({ ...REGISTRY_PACKAGE, versions: [latest] })
+      .mockRejectedValueOnce(new NotFoundException());
+
+    await processor.process(JOB);
+
+    expect(analyzer.analyze.mock.calls[0][0].dependencyStats).toEqual([]);
+    expect(lastScanUpdate().status).toBe('completed');
+  });
+
   it('fails with tarball_too_large at once, without a retry', async () => {
     registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
     registry.getFiles.mockRejectedValue(new PayloadTooLargeException());

@@ -10,8 +10,8 @@ import type { Check, CheckFinding } from '../analyzer.types.js';
 const LONG_GAP_DAYS = 730;
 
 /** A package younger than this, with fewer weekly downloads than the limit, is new and unused. */
-const NEW_PACKAGE_DAYS = 30;
-const LOW_WEEKLY_DOWNLOADS = 100;
+export const NEW_PACKAGE_DAYS = 30;
+export const LOW_WEEKLY_DOWNLOADS = 100;
 
 /**
  * CHECK: maintainer and publish anomalies

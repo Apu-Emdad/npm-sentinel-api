@@ -9,6 +9,14 @@ import type {
   RegistryVersion,
 } from '../modules/packages/registry/registry.types.js';
 
+/** Registry facts about one dependency of the scanned version. */
+export interface DependencyStats {
+  name: string;
+  createdAt: string | null;
+  /** Last week's downloads, or null when npm's stats could not be fetched. */
+  weeklyDownloads: number | null;
+}
+
 /** What every check gets: the package, the version being scanned, its files and downloads. */
 export interface CheckInput {
   registryPackage: RegistryPackage;
@@ -16,6 +24,8 @@ export interface CheckInput {
   files: PackageFile[];
   /** Last week's downloads, or null when npm's stats could not be fetched. */
   weeklyDownloads: number | null;
+  /** Stats of the dependencies that are not well-known packages. */
+  dependencyStats: DependencyStats[];
 }
 
 /** One problem a check found, with the evidence that triggered it. */
