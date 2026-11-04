@@ -6,7 +6,7 @@ import type { Check } from '../analyzer.types.js';
 const POPULAR_PACKAGES = npmTopDownloads;
 
 /** About 17,000 packages popular by downloads or dependents; these are never flagged themselves. */
-const KNOWN_PACKAGES = new Set(npmHighImpact);
+export const KNOWN_PACKAGES = new Set(npmHighImpact);
 
 /** Shorter names are skipped by the one typo rule, since `ms`, `qs` and `ws` would match almost anything. */
 const MIN_TYPO_LENGTH = 5;
@@ -22,26 +22,32 @@ const MIN_TYPO_LENGTH = 5;
 export const typosquattingCheck: Check = {
   type: CheckType.typosquatting,
   run: async ({ registryPackage }) => {
-    const name = registryPackage.name.toLowerCase();
-    if (KNOWN_PACKAGES.has(name)) return [];
+    const match = findLookalike(registryPackage.name);
+    if (!match) return [];
 
-    for (const popular of POPULAR_PACKAGES) {
-      const rule = getLookalikeRule(name, popular);
-      if (!rule) continue;
-
-      return [
-        {
-          checkType: CheckType.typosquatting,
-          severity: Severity.medium,
-          summary: `Name looks like the popular package "${popular}"`,
-          evidence: popular,
-          details: { lookalike: popular, rule },
-        },
-      ];
-    }
-
-    return [];
+    return [
+      {
+        checkType: CheckType.typosquatting,
+        severity: Severity.medium,
+        summary: `Name looks like the popular package "${match.lookalike}"`,
+        evidence: match.lookalike,
+        details: match,
+      },
+    ];
   },
+};
+
+/** The most-downloaded popular package that `name` imitates, or null when it imitates none. */
+export const findLookalike = (name: string) => {
+  const lowerName = name.toLowerCase();
+  if (KNOWN_PACKAGES.has(lowerName)) return null;
+
+  for (const popular of POPULAR_PACKAGES) {
+    const rule = getLookalikeRule(lowerName, popular);
+    if (rule) return { lookalike: popular, rule };
+  }
+
+  return null;
 };
 
 /** Returns which rule makes the two names look alike, or null when they don't. */

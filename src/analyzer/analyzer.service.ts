@@ -10,6 +10,7 @@ import type {
 import { installScriptsCheck } from './checks/install-scripts.check.js';
 import { maintainerAnomalyCheck } from './checks/maintainer-anomaly.check.js';
 import { obfuscationCheck } from './checks/obfuscation.check.js';
+import { suspiciousDependencyCheck } from './checks/suspicious-dependency.check.js';
 import { typosquattingCheck } from './checks/typosquatting.check.js';
 
 /**
@@ -26,6 +27,7 @@ export class AnalyzerService {
     typosquattingCheck,
     obfuscationCheck,
     maintainerAnomalyCheck,
+    suspiciousDependencyCheck,
   ];
 
   async analyze(input: CheckInput): Promise<AnalysisResult> {
@@ -64,7 +66,11 @@ export class AnalyzerService {
   }
 
   /** The registry facts the checks saw, saved with the scan. */
-  private getSnapshot({ registryVersion, weeklyDownloads }: CheckInput) {
+  private getSnapshot({
+    registryVersion,
+    weeklyDownloads,
+    dependencyStats,
+  }: CheckInput) {
     return {
       version: registryVersion.version,
       publishedAt: registryVersion.publishedAt,
@@ -76,6 +82,7 @@ export class AnalyzerService {
       peerDependencies: registryVersion.peerDependencies,
       unpackedSize: registryVersion.unpackedSize,
       weeklyDownloads,
+      dependencyStats,
     };
   }
 }

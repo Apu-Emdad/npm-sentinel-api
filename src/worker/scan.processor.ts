@@ -13,7 +13,11 @@ import {
   SCAN_TIMEOUT_MS,
 } from '../analyzer/analyzer.constants.js';
 import { AnalyzerService } from '../analyzer/analyzer.service.js';
-import type { AnalysisResult } from '../analyzer/analyzer.types.js';
+import type {
+  AnalysisResult,
+  DependencyStats,
+} from '../analyzer/analyzer.types.js';
+import { getUnknownDependencies } from '../analyzer/checks/suspicious-dependency.check.js';
 import { QUEUE } from '../common/constants/queues.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { ScanError, ScanStatus } from '../generated/prisma/enums.js';
@@ -130,15 +134,18 @@ export class ScanProcessor extends WorkerHost {
 
     if (!registryVersion?.tarballUrl) return null;
 
-    const [files, weeklyDownloads] = await Promise.all([
+    const [files, weeklyDownloads, dependencyStats] = await Promise.all([
       this.registry.getFiles(registryVersion.tarballUrl, scan.packageName),
       this.getWeeklyDownloads(scan.packageName),
+      this.getDependencyStats(registryVersion),
     ]);
+
     const result = await this.analyzer.analyze({
       registryPackage,
       registryVersion,
       files,
       weeklyDownloads,
+      dependencyStats,
     });
     return { registryPackage, registryVersion, result };
   }
@@ -157,6 +164,33 @@ export class ScanProcessor extends WorkerHost {
       .catch((error: unknown) =>
         error instanceof NotFoundException ? 0 : null,
       );
+  }
+
+  /**
+   * Creation date and downloads of the dependencies that are not well-known
+   *
+   * Looks them all up at once. A dependency that cannot be fetched is left
+   * out, since it alone should not fail the scan.
+   */
+  private async getDependencyStats(
+    registryVersion: RegistryVersion,
+  ): Promise<DependencyStats[]> {
+    const stats = await Promise.all(
+      getUnknownDependencies(registryVersion).map((name) =>
+        Promise.all([
+          this.registry.getPackage(name),
+          this.getWeeklyDownloads(name),
+        ])
+          .then(([dependency, weeklyDownloads]) => ({
+            name,
+            createdAt: dependency.createdAt,
+            weeklyDownloads,
+          }))
+          .catch(() => null),
+      ),
+    );
+
+    return stats.filter((item) => item !== null);
   }
 
   /** Saves the package and version rows if they are new, and returns the version id. */
