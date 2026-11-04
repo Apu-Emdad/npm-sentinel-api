@@ -45,6 +45,10 @@ describe('ScansService', () => {
       findUnique: ReturnType<typeof vi.fn>;
       upsert: ReturnType<typeof vi.fn>;
     };
+    manifest: {
+      create: ReturnType<typeof vi.fn>;
+      findUnique: ReturnType<typeof vi.fn>;
+    };
     $transaction: ReturnType<typeof vi.fn>;
   };
   let registry: { getPackage: ReturnType<typeof vi.fn> };
@@ -61,6 +65,12 @@ describe('ScansService', () => {
       packageVersion: { upsert: vi.fn().mockResolvedValue({ id: 9n }) },
       finding: { deleteMany: vi.fn() },
       scan: { findUnique: vi.fn(), upsert: vi.fn() },
+      manifest: {
+        create: vi
+          .fn()
+          .mockResolvedValue({ uid: 'Bk3dE5gH7j', createdAt: CREATED_AT }),
+        findUnique: vi.fn(),
+      },
       // the batch transaction resolves to the result of each query
       $transaction: vi.fn((queries: unknown[]) => Promise.all(queries)),
     };
@@ -214,6 +224,290 @@ describe('ScansService', () => {
       ).rejects.toBe(error);
 
       expect(prisma.package.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createBulkScan', () => {
+    const bulkScan = (dependencies: object, includeDev?: boolean) =>
+      scansService.createBulkScan({
+        packageJson: JSON.stringify(dependencies),
+        includeDev,
+      });
+
+    const savedManifest = () => prisma.manifest.create.mock.calls[0][0].data;
+
+    it.each([
+      ['not JSON', '{dependencies', 'package.json is not valid JSON'],
+      ['an array', '[]', 'package.json must be a JSON object'],
+      ['empty', '{"name":"app"}', 'package.json has no dependencies'],
+    ])('rejects a package.json that is %s', async (_, packageJson, message) => {
+      await expect(
+        scansService.createBulkScan({ packageJson }),
+      ).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST, message });
+    });
+
+    it('reads devDependencies only when asked', async () => {
+      const packageJson = {
+        dependencies: { 'left-pad': '^1.0.0' },
+        devDependencies: { 'left-pad': '1.2.0', vitest: '^4.0.0' },
+      };
+
+      await bulkScan(packageJson);
+      expect(registry.getPackage).toHaveBeenCalledTimes(1);
+
+      registry.getPackage.mockClear();
+      await bulkScan(packageJson, true);
+      // left-pad is read once, from dependencies
+      expect(registry.getPackage.mock.calls).toEqual([
+        ['left-pad'],
+        ['vitest'],
+      ]);
+    });
+
+    it('skips dependencies that are not on the registry', async () => {
+      await bulkScan({
+        dependencies: {
+          a: 'git+https://github.com/x/a.git',
+          b: 'https://example.com/b.tgz',
+          c: 'file:../c',
+          d: 'workspace:*',
+          e: 'user/repo#main',
+          f: 'link:./f',
+        },
+      });
+
+      expect(registry.getPackage).not.toHaveBeenCalled();
+      expect(savedManifest().skipped).toEqual([
+        {
+          packageName: 'a',
+          range: 'git+https://github.com/x/a.git',
+          reason: 'Git dependencies are not scanned',
+        },
+        {
+          packageName: 'b',
+          range: 'https://example.com/b.tgz',
+          reason: 'URL dependencies are not scanned',
+        },
+        {
+          packageName: 'c',
+          range: 'file:../c',
+          reason: 'Local dependencies are not scanned',
+        },
+        {
+          packageName: 'd',
+          range: 'workspace:*',
+          reason: 'Workspace packages are not scanned',
+        },
+        {
+          packageName: 'e',
+          range: 'user/repo#main',
+          reason: 'Git dependencies are not scanned',
+        },
+        {
+          packageName: 'f',
+          range: 'link:./f',
+          reason: 'Local dependencies are not scanned',
+        },
+      ]);
+      expect(savedManifest().manifestDependencies.create).toEqual([]);
+    });
+
+    it.each([
+      ['^1.0.0', '1.3.0'],
+      ['~1.2.0', '1.2.0'],
+      ['latest', '1.3.0'],
+      ['*', '1.3.0'],
+      ['1.2.0', '1.2.0'],
+    ])('resolves the range %s to %s', async (range, version) => {
+      await bulkScan({ dependencies: { 'left-pad': range } });
+
+      expect(prisma.packageVersion.upsert.mock.calls[0][0].create.version).toBe(
+        version,
+      );
+      expect(savedManifest().manifestDependencies.create).toEqual([
+        {
+          packageName: 'left-pad',
+          range,
+          scanInfo: { connect: { packageVersionId: 9n } },
+        },
+      ]);
+    });
+
+    it('prefers the latest dist-tag over a higher version in range', async () => {
+      registry.getPackage.mockResolvedValue({
+        ...REGISTRY_PACKAGE,
+        distTags: { latest: '1.2.0' },
+      });
+
+      await bulkScan({ dependencies: { 'left-pad': '^1.0.0' } });
+
+      expect(prisma.packageVersion.upsert.mock.calls[0][0].create.version).toBe(
+        '1.2.0',
+      );
+    });
+
+    it('scans the real package of an npm: alias', async () => {
+      await bulkScan({ dependencies: { pad: 'npm:left-pad@^1.2.0' } });
+
+      expect(registry.getPackage).toHaveBeenCalledWith('left-pad');
+      expect(savedManifest().manifestDependencies.create[0]).toMatchObject({
+        packageName: 'pad',
+        range: 'npm:left-pad@^1.2.0',
+      });
+    });
+
+    it('skips a missing package, an unreachable registry and an unmatched range', async () => {
+      registry.getPackage.mockImplementation((name: string) => {
+        if (name === 'nope') {
+          return Promise.reject(new NotFoundException('not found'));
+        }
+        if (name === 'down') return Promise.reject(new Error('timeout'));
+        return Promise.resolve(REGISTRY_PACKAGE);
+      });
+
+      await bulkScan({
+        dependencies: { nope: '^1.0.0', down: '^1.0.0', 'left-pad': '^9.0.0' },
+      });
+
+      expect(savedManifest().skipped).toEqual([
+        {
+          packageName: 'nope',
+          range: '^1.0.0',
+          reason: 'Package was not found on npm',
+        },
+        {
+          packageName: 'down',
+          range: '^1.0.0',
+          reason: 'npm registry could not be reached',
+        },
+        {
+          packageName: 'left-pad',
+          range: '^9.0.0',
+          reason: 'No version matches "^9.0.0"',
+        },
+      ]);
+      expect(prisma.package.upsert).not.toHaveBeenCalled();
+    });
+
+    it('queues a new version', async () => {
+      prisma.scan.findUnique.mockResolvedValue(null);
+
+      await bulkScan({ dependencies: { 'left-pad': '^1.0.0' } });
+
+      expect(prisma.scan.upsert).toHaveBeenCalledTimes(1);
+      expect(scanQueue.add).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['completed', 'queued', 'running'])(
+      'reuses a %s scan without queueing it again',
+      async (status) => {
+        prisma.scan.findUnique.mockResolvedValue({ status });
+
+        await bulkScan({ dependencies: { 'left-pad': '^1.0.0' } });
+
+        expect(prisma.scan.upsert).not.toHaveBeenCalled();
+        expect(scanQueue.add).not.toHaveBeenCalled();
+        expect(savedManifest().manifestDependencies.create).toHaveLength(1);
+      },
+    );
+
+    it('scans a failed version again', async () => {
+      prisma.scan.findUnique.mockResolvedValue({ status: 'failed' });
+
+      await bulkScan({ dependencies: { 'left-pad': '^1.0.0' } });
+
+      expect(prisma.scan.upsert.mock.calls[0][0].update.status).toBe('queued');
+      expect(scanQueue.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('links the bulk scan to the logged-in user', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 7n });
+
+      await scansService.createBulkScan(
+        { packageJson: '{"dependencies":{"left-pad":"^1.0.0"}}' },
+        USER,
+      );
+
+      expect(savedManifest().userId).toBe(7n);
+    });
+
+    it('returns the bulk scan uid and counts', async () => {
+      const result = await bulkScan({
+        dependencies: { 'left-pad': '^1.0.0', local: 'file:../local' },
+      });
+
+      expect(result).toEqual({
+        status: HttpStatus.ACCEPTED,
+        message: 'Bulk scan queued successfully',
+        data: {
+          uid: 'Bk3dE5gH7j',
+          createdAt: CREATED_AT,
+          total: 1,
+          skipped: 1,
+        },
+      });
+    });
+  });
+
+  describe('getBulkScan', () => {
+    const item = (packageName: string, status: string, riskLevel?: string) => ({
+      packageName,
+      range: '^1.0.0',
+      scanInfo: {
+        uid: `${packageName}-uid`,
+        status,
+        riskScore: riskLevel ? 50 : null,
+        riskLevel: riskLevel ?? null,
+        packageVersionInfo: { version: '1.0.0' },
+      },
+    });
+
+    it('returns progress, risk counts and each package', async () => {
+      const skipped = [
+        {
+          packageName: 'local',
+          range: 'file:../local',
+          reason: 'Local dependencies are not scanned',
+        },
+      ];
+      prisma.manifest.findUnique.mockResolvedValue({
+        uid: 'Bk3dE5gH7j',
+        includeDev: false,
+        skipped,
+        createdAt: CREATED_AT,
+        manifestDependencies: [
+          item('a', 'completed', 'high'),
+          item('b', 'completed', 'low'),
+          item('c', 'failed'),
+          item('d', 'running'),
+        ],
+      });
+
+      const result = await scansService.getBulkScan('Bk3dE5gH7j');
+
+      expect(result.data).toMatchObject({
+        uid: 'Bk3dE5gH7j',
+        progress: { done: 3, total: 4 },
+        counts: { low: 1, medium: 0, high: 1 },
+        skipped,
+      });
+      expect(result.data.items[0]).toEqual({
+        packageName: 'a',
+        range: '^1.0.0',
+        scanUid: 'a-uid',
+        version: '1.0.0',
+        status: 'completed',
+        riskScore: 50,
+        riskLevel: 'high',
+      });
+    });
+
+    it('throws NotFoundException when the bulk scan does not exist', async () => {
+      prisma.manifest.findUnique.mockResolvedValue(null);
+
+      await expect(scansService.getBulkScan('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

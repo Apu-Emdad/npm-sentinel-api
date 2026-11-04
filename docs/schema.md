@@ -22,6 +22,9 @@ erDiagram
     package_versions ||--o{ scans : "scanned by"
     package_versions ||--o{ reviews : "reviewed in"
     scans ||--o{ findings : "produces"
+    users |o--o{ manifests : "starts"
+    manifests ||--o{ manifest_dependencies : "groups"
+    scans ||--o{ manifest_dependencies : "listed in"
 
     roles {
         bigint id PK
@@ -79,6 +82,21 @@ erDiagram
         bigint package_version_id FK
         ReviewVerdict verdict
         text source
+    }
+    manifests {
+        bigint id PK
+        text uid UK
+        bigint user_id FK "null if anonymous"
+        boolean include_dev
+        jsonb skipped
+    }
+    manifest_dependencies {
+        bigint id PK
+        text uid UK
+        bigint manifest_id FK
+        bigint scan_id FK
+        text package_name
+        text range
     }
 ```
 
@@ -195,6 +213,42 @@ Indexes:
 - `(user_id, created_at desc)`: scan history (later)
 - `(status)`: find stuck or queued scans
 
+### `manifests`
+
+One package.json sent to `POST /scans/bulk` (npm calls package.json the package manifest). Its dependencies are scanned together.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
+| `uid` | `text` | no | Unique, default `generate_uid()`. Returned by `POST /scans/bulk` |
+| `user_id` | `bigint` | yes | FK → `users.id`, on delete set null. `null` if anonymous |
+| `include_dev` | `boolean` | no | Whether `devDependencies` were scanned too |
+| `skipped` | `jsonb` | no | Default `[]`. Dependencies that were not scanned, as `{ packageName, range, reason }`: git, URL, local and workspace dependencies, missing packages, ranges no version matches |
+| `created_at` | `timestamp(3)` | no | Default `now()` |
+
+Indexes:
+
+- `(user_id, created_at desc)`: manifest history (later)
+
+### `manifest_dependencies`
+
+One scanned dependency of a manifest. It points to the scan of the version the range resolved to, so manifests share scans with each other and with `POST /scans`. It holds no results.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
+| `uid` | `text` | no | Unique, default `generate_uid()` |
+| `manifest_id` | `bigint` | no | FK → `manifests.id`, on delete cascade |
+| `scan_id` | `bigint` | no | FK → `scans.id`, on delete cascade |
+| `package_name` | `text` | no | The dependency name as written in package.json (the alias name for `npm:` aliases) |
+| `range` | `text` | no | The version as written in package.json, e.g. `^4.21.1` or `npm:lodash@^4.17.0` |
+| `created_at` | `timestamp(3)` | no | Default `now()` |
+
+Indexes:
+
+- unique `(manifest_id, package_name)`: one item per dependency
+- `(scan_id)`: the manifests a scan is listed in
+
 ### `findings`
 
 One red flag found by one check in one scan.
@@ -237,6 +291,7 @@ Constraints: unique `(package_version_id, source)`. Different sources may disagr
 - **Roles live in their own table.** Each user has exactly one role through `users.role_id`; many users share a role. New roles are added as rows, without a migration. A role in use can't be deleted (`on delete restrict`). Permissions are not modelled yet.
 - **Scans are public, so `user_id` is optional.** Anonymous scans have no user. Deleting a user keeps their scans as anonymous, since scans are also research data. Rate limiting is per IP and lives in Redis; IP addresses are not stored in the database.
 - **One scan per package version.** A published npm version's code never changes, so older results add nothing. `POST /scans` checks the registry first and creates the `packages` and `package_versions` rows only after it confirms them, so those tables never hold names that don't exist.
+- **Manifests reuse scans.** A manifest does not copy results; each dependency points to the one scan of its version. A completed or running scan is reused as it is, and only a failed one is queued again. Ranges are resolved the way npm does: the `latest` tag when it fits, otherwise the highest version that fits.
 - **Reviews are per version, not per package.** Malicious code is usually in specific versions, e.g. a hijacked release of a popular package. A typosquat gets one review per version.
 - **`metadata_snapshot` keeps scans reproducible.** Downloads and maintainers change over time. The snapshot records what the checks saw, so a scan can be re-analyzed later for research.
 - **`analyzer_version` separates results from different analyzer logic.** When checks or weights change, old and new scores stay comparable.
