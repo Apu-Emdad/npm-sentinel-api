@@ -11,6 +11,10 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
+/** npm package name; scoped names like `@scope/name` are allowed. */
+export const PACKAGE_NAME_PATTERN =
+  /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
+
 export class CreateScanDto {
   @ApiProperty({
     example: 'left-pad',
@@ -20,7 +24,7 @@ export class CreateScanDto {
   @IsString({ message: 'Package name must be a string' })
   @IsNotEmpty({ message: 'Package name is required' })
   @MaxLength(214, { message: 'Package name must be at most 214 characters' })
-  @Matches(/^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/, {
+  @Matches(PACKAGE_NAME_PATTERN, {
     message: 'Package name must be a valid npm package name',
   })
   packageName: string;
