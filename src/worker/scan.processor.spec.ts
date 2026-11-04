@@ -5,7 +5,6 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import dayjs from 'dayjs';
 import type { AnalyzerService } from '../analyzer/analyzer.service.js';
 import type { RegistryService } from '../modules/packages/registry/registry.service.js';
 import type { PrismaService } from '../infra/prisma/prisma.service.js';
@@ -69,8 +68,6 @@ const ANALYSIS = {
 describe('ScanProcessor', () => {
   let prisma: {
     scan: { update: ReturnType<typeof vi.fn> };
-    package: { upsert: ReturnType<typeof vi.fn> };
-    packageVersion: { upsert: ReturnType<typeof vi.fn> };
     finding: { createMany: ReturnType<typeof vi.fn> };
     $transaction: ReturnType<typeof vi.fn>;
     $queryRaw: ReturnType<typeof vi.fn>;
@@ -89,8 +86,6 @@ describe('ScanProcessor', () => {
   beforeEach(() => {
     prisma = {
       scan: { update: vi.fn() },
-      package: { upsert: vi.fn().mockResolvedValue({ id: 5n }) },
-      packageVersion: { upsert: vi.fn().mockResolvedValue({ id: 9n }) },
       finding: { createMany: vi.fn() },
       $transaction: vi.fn(),
       $queryRaw: vi.fn(),
@@ -98,7 +93,7 @@ describe('ScanProcessor', () => {
     prisma.scan.update.mockResolvedValueOnce({
       id: 1n,
       packageName: 'left-pad',
-      requestedVersion: null,
+      packageVersionInfo: { version: '1.3.0' },
     });
     registry = {
       getPackage: vi.fn(),
@@ -124,24 +119,12 @@ describe('ScanProcessor', () => {
     expect(first.data.startedAt).toBeInstanceOf(Date);
   });
 
-  it('completes the scan with the latest version when none was requested', async () => {
+  it('completes the scan', async () => {
     registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
 
     await processor.process(JOB);
 
-    expect(prisma.package.upsert.mock.calls[0][0].create).toEqual({
-      name: 'left-pad',
-    });
-    expect(prisma.packageVersion.upsert.mock.calls[0][0].create).toMatchObject({
-      packageId: 5n,
-      version: '1.3.0',
-      publishedAt: dayjs('2018-04-01T00:00:00.000Z').toDate(),
-      integrity: 'sha512-new',
-    });
-    expect(lastScanUpdate()).toMatchObject({
-      status: 'completed',
-      packageVersionId: 9n,
-    });
+    expect(lastScanUpdate().status).toBe('completed');
     expect(lastScanUpdate().completedAt).toBeInstanceOf(Date);
   });
 
@@ -166,34 +149,34 @@ describe('ScanProcessor', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the requested version', async () => {
+  it("analyzes the scan's version", async () => {
     prisma.scan.update.mockReset();
     prisma.scan.update.mockResolvedValueOnce({
       id: 1n,
       packageName: 'left-pad',
-      requestedVersion: '1.2.0',
+      packageVersionInfo: { version: '1.2.0' },
     });
     registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
 
     await processor.process(JOB);
 
-    expect(prisma.packageVersion.upsert.mock.calls[0][0].create.version).toBe(
+    expect(analyzer.analyze.mock.calls[0][0].registryVersion.version).toBe(
       '1.2.0',
     );
   });
 
-  it('fails with version_not_found when the version does not exist', async () => {
+  it('fails with version_not_found when the version no longer exists', async () => {
     prisma.scan.update.mockReset();
     prisma.scan.update.mockResolvedValueOnce({
       id: 1n,
       packageName: 'left-pad',
-      requestedVersion: '9.9.9',
+      packageVersionInfo: { version: '9.9.9' },
     });
     registry.getPackage.mockResolvedValue(REGISTRY_PACKAGE);
 
     await processor.process(JOB);
 
-    expect(prisma.package.upsert).not.toHaveBeenCalled();
+    expect(prisma.finding.createMany).not.toHaveBeenCalled();
     expect(lastScanUpdate()).toMatchObject({
       status: 'failed',
       error: 'version_not_found',
@@ -205,7 +188,7 @@ describe('ScanProcessor', () => {
 
     await processor.process(JOB);
 
-    expect(prisma.package.upsert).not.toHaveBeenCalled();
+    expect(prisma.finding.createMany).not.toHaveBeenCalled();
     expect(lastScanUpdate()).toMatchObject({
       status: 'failed',
       error: 'package_not_found',
@@ -286,7 +269,7 @@ describe('ScanProcessor', () => {
 
     await processor.process(JOB);
 
-    expect(prisma.package.upsert).not.toHaveBeenCalled();
+    expect(prisma.finding.createMany).not.toHaveBeenCalled();
     expect(lastScanUpdate()).toMatchObject({
       status: 'failed',
       error: 'tarball_too_large',
@@ -324,7 +307,7 @@ describe('ScanProcessor', () => {
     await processing;
     vi.useRealTimers();
 
-    expect(prisma.package.upsert).not.toHaveBeenCalled();
+    expect(prisma.finding.createMany).not.toHaveBeenCalled();
     expect(lastScanUpdate()).toMatchObject({
       status: 'failed',
       error: 'timeout',
