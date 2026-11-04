@@ -126,7 +126,7 @@ model PackageVersion {
   createdAt   DateTime  @default(now()) @map("created_at")
 
   packageInfo Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  scans       Scan[]
+  scanInfo    Scan?
   reviews     Review[]
 
   @@unique([packageId, version])
@@ -138,8 +138,7 @@ model Scan {
   uid              String     @unique @default(dbgenerated("generate_uid()"))
   userId           BigInt?    @map("user_id")
   packageName      String     @map("package_name")
-  requestedVersion String?    @map("requested_version")
-  packageVersionId BigInt?    @map("package_version_id")
+  packageVersionId BigInt     @unique @map("package_version_id")
   status           ScanStatus @default(queued)
   riskScore        Int?       @map("risk_score") @db.SmallInt
   riskLevel        RiskLevel? @map("risk_level")
@@ -150,11 +149,10 @@ model Scan {
   startedAt        DateTime?  @map("started_at")
   completedAt      DateTime?  @map("completed_at")
 
-  scannerInfo        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  packageVersionInfo PackageVersion? @relation(fields: [packageVersionId], references: [id], onDelete: SetNull)
+  scannerInfo        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  packageVersionInfo PackageVersion @relation(fields: [packageVersionId], references: [id], onDelete: Cascade)
   findings           Finding[]
 
-  @@index([packageVersionId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@index([status])
   @@map("scans")

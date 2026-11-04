@@ -60,7 +60,7 @@ erDiagram
         bigint id PK
         text uid UK
         bigint user_id FK "null if anonymous"
-        bigint package_version_id FK "null until resolved"
+        bigint package_version_id FK "one scan per version"
         text package_name
         ScanStatus status
         smallint risk_score
@@ -170,16 +170,15 @@ Constraints: unique `(package_id, version)`.
 
 ### `scans`
 
-One analyzer run on one package version.
+The analyzer result of one package version. Each version has one scan; scanning it again reruns the checks on the same row, since only the latest result is kept.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `text` | no | Unique, default `generate_uid()` (10 characters). Returned by `POST /scans` as the scan id |
-| `user_id` | `bigint` | yes | FK → `users.id`, on delete set null. `null` for anonymous scans |
-| `package_name` | `text` | no | Name as requested |
-| `requested_version` | `text` | yes | Version as requested; `null` means `latest` |
-| `package_version_id` | `bigint` | yes | FK → `package_versions.id`. Set by the worker once the version is resolved; stays `null` if the package or version does not exist |
+| `user_id` | `bigint` | yes | FK → `users.id`, on delete set null. The user who scanned it last; `null` if only anonymous visitors did |
+| `package_name` | `text` | no | Package name from the registry |
+| `package_version_id` | `bigint` | no | FK → `package_versions.id`, on delete cascade. Unique: one scan per version. `POST /scans` finds the version on the registry first, so a missing package or version never gets a scan |
 | `status` | `ScanStatus` | no | `queued`, `running`, `completed`, `failed`. Default `queued` |
 | `risk_score` | `smallint` | yes | 0 to 100, set when `completed`. Check constraint `risk_score between 0 and 100` |
 | `risk_level` | `RiskLevel` | yes | `low`, `medium`, `high`. Set when `completed` |
@@ -192,7 +191,7 @@ One analyzer run on one package version.
 
 Indexes:
 
-- `(package_version_id, created_at desc)`: latest scan per version for `GET /packages/:name`
+- unique `(package_version_id)`: the scan of a version, for rescans and `GET /packages/:name`
 - `(user_id, created_at desc)`: scan history (later)
 - `(status)`: find stuck or queued scans
 
@@ -237,7 +236,7 @@ Constraints: unique `(package_version_id, source)`. Different sources may disagr
 - **Two ids per row.** The integer `id` keeps primary keys, foreign keys and indexes small and fast. The random `uid` is what the API exposes, so URLs like `/scans/:id` can't be guessed or counted. The integer `id` never leaves the backend.
 - **Roles live in their own table.** Each user has exactly one role through `users.role_id`; many users share a role. New roles are added as rows, without a migration. A role in use can't be deleted (`on delete restrict`). Permissions are not modelled yet.
 - **Scans are public, so `user_id` is optional.** Anonymous scans have no user. Deleting a user keeps their scans as anonymous, since scans are also research data. Rate limiting is per IP and lives in Redis; IP addresses are not stored in the database.
-- **Scans store the requested name, not a package FK.** `POST /scans` returns before the registry is checked, and the name may not exist. The worker creates the `packages` and `package_versions` rows only after the registry confirms them, so those tables never hold names that don't exist.
+- **One scan per package version.** A published npm version's code never changes, so older results add nothing. `POST /scans` checks the registry first and creates the `packages` and `package_versions` rows only after it confirms them, so those tables never hold names that don't exist.
 - **Reviews are per version, not per package.** Malicious code is usually in specific versions, e.g. a hijacked release of a popular package. A typosquat gets one review per version.
 - **`metadata_snapshot` keeps scans reproducible.** Downloads and maintainers change over time. The snapshot records what the checks saw, so a scan can be re-analyzed later for research.
 - **`analyzer_version` separates results from different analyzer logic.** When checks or weights change, old and new scores stay comparable.
@@ -246,19 +245,14 @@ Constraints: unique `(package_version_id, source)`. Different sources may disagr
 
 ## How this becomes a dataset
 
-Join `reviews` to the latest completed scan of the same version:
+Join `reviews` to the completed scan of the same version:
 
 ```sql
 select pv.id, p.name, pv.version, r.verdict, s.risk_score, s.analyzer_version
 from reviews r
 join package_versions pv on pv.id = r.package_version_id
 join packages p on p.id = pv.package_id
-join lateral (
-  select * from scans
-  where package_version_id = pv.id and status = 'completed'
-  order by created_at desc
-  limit 1
-) s on true;
+join scans s on s.package_version_id = pv.id and s.status = 'completed';
 ```
 
 Each row is one reviewed example; its findings are the features.

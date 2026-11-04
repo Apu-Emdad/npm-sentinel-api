@@ -3,72 +3,166 @@ import type { Queue } from 'bullmq';
 import dayjs from 'dayjs';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
+import type { RegistryService } from '../packages/registry/registry.service.js';
 import { ScansService } from './scans.service.js';
 
 const USER: AuthUser = { uid: 'k3F9x2Mq7A', userName: 'apu', role: 'USER' };
 const CREATED_AT = dayjs('2026-10-28T10:00:00Z').toDate();
 
+const REGISTRY_PACKAGE = {
+  name: 'left-pad',
+  distTags: { latest: '1.3.0' },
+  versions: [
+    {
+      version: '1.2.0',
+      publishedAt: '2017-01-01T00:00:00.000Z',
+      tarballUrl: 'https://registry.npmjs.org/left-pad/-/left-pad-1.2.0.tgz',
+      integrity: 'sha512-old',
+    },
+    {
+      version: '1.3.0',
+      publishedAt: '2018-04-01T00:00:00.000Z',
+      tarballUrl: 'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz',
+      integrity: 'sha512-new',
+    },
+  ],
+};
+
+const SCAN = {
+  uid: 'Ab3dE5gH7j',
+  status: 'queued',
+  packageName: 'left-pad',
+  createdAt: CREATED_AT,
+};
+
 describe('ScansService', () => {
   let prisma: {
     user: { findUnique: ReturnType<typeof vi.fn> };
+    package: { upsert: ReturnType<typeof vi.fn> };
+    packageVersion: { upsert: ReturnType<typeof vi.fn> };
+    finding: { deleteMany: ReturnType<typeof vi.fn> };
     scan: {
-      create: ReturnType<typeof vi.fn>;
       findUnique: ReturnType<typeof vi.fn>;
+      upsert: ReturnType<typeof vi.fn>;
     };
+    $transaction: ReturnType<typeof vi.fn>;
   };
-  let scanQueue: { add: ReturnType<typeof vi.fn> };
+  let registry: { getPackage: ReturnType<typeof vi.fn> };
+  let scanQueue: {
+    add: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  };
   let scansService: ScansService;
 
   beforeEach(() => {
     prisma = {
       user: { findUnique: vi.fn() },
-      scan: { create: vi.fn(), findUnique: vi.fn() },
+      package: { upsert: vi.fn().mockResolvedValue({ id: 5n }) },
+      packageVersion: { upsert: vi.fn().mockResolvedValue({ id: 9n }) },
+      finding: { deleteMany: vi.fn() },
+      scan: { findUnique: vi.fn(), upsert: vi.fn() },
+      // the batch transaction resolves to the result of each query
+      $transaction: vi.fn((queries: unknown[]) => Promise.all(queries)),
     };
-    scanQueue = { add: vi.fn() };
+    prisma.scan.upsert.mockResolvedValue(SCAN);
+    registry = { getPackage: vi.fn().mockResolvedValue(REGISTRY_PACKAGE) };
+    scanQueue = { add: vi.fn(), remove: vi.fn() };
     scansService = new ScansService(
       prisma as unknown as PrismaService,
+      registry as unknown as RegistryService,
       scanQueue as unknown as Queue,
     );
   });
 
   describe('createScan', () => {
-    const created = {
-      uid: 'Ab3dE5gH7j',
-      status: 'queued',
-      packageName: 'left-pad',
-      requestedVersion: '1.3.0',
-      createdAt: CREATED_AT,
-    };
+    it('scans the latest version when none was requested', async () => {
+      const result = await scansService.createScan({ packageName: 'left-pad' });
 
-    it('queues a scan without a user', async () => {
-      prisma.scan.create.mockResolvedValue(created);
-
-      const result = await scansService.createScan({
-        packageName: 'left-pad',
+      expect(prisma.packageVersion.upsert.mock.calls[0][0].create).toEqual({
+        packageId: 5n,
         version: '1.3.0',
-      });
-
-      expect(prisma.user.findUnique).not.toHaveBeenCalled();
-      expect(prisma.scan.create.mock.calls[0][0].data).toEqual({
-        packageName: 'left-pad',
-        requestedVersion: '1.3.0',
-        userId: undefined,
+        publishedAt: dayjs('2018-04-01T00:00:00.000Z').toDate(),
+        tarballUrl: 'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz',
+        integrity: 'sha512-new',
       });
       expect(result.status).toBe(HttpStatus.ACCEPTED);
-      expect(result.data).toEqual({
-        uid: 'Ab3dE5gH7j',
-        status: 'queued',
+      expect(result.data).toEqual({ ...SCAN, version: '1.3.0' });
+    });
+
+    it('scans the requested version', async () => {
+      const result = await scansService.createScan({
         packageName: 'left-pad',
-        version: '1.3.0',
-        createdAt: CREATED_AT,
+        version: '1.2.0',
+      });
+
+      expect(prisma.packageVersion.upsert.mock.calls[0][0].create.version).toBe(
+        '1.2.0',
+      );
+      expect(result.data).toMatchObject({ version: '1.2.0' });
+    });
+
+    it('creates the scan for the version without a user', async () => {
+      await scansService.createScan({ packageName: 'left-pad' });
+
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(prisma.scan.upsert.mock.calls[0][0]).toMatchObject({
+        where: { packageVersionId: 9n },
+        create: {
+          packageName: 'left-pad',
+          packageVersionId: 9n,
+          userId: undefined,
+        },
       });
     });
 
-    it('adds the scan to the queue', async () => {
-      prisma.scan.create.mockResolvedValue(created);
+    it('links the scan to the logged-in user', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 7n });
+
+      await scansService.createScan({ packageName: 'left-pad' }, USER);
+
+      expect(prisma.user.findUnique.mock.calls[0][0].where).toEqual({
+        uid: USER.uid,
+      });
+      const upsert = prisma.scan.upsert.mock.calls[0][0];
+      expect(upsert.create.userId).toBe(7n);
+      expect(upsert.update.userId).toBe(7n);
+    });
+
+    it('clears the old result and findings of a finished scan', async () => {
+      prisma.scan.findUnique.mockResolvedValue({
+        ...SCAN,
+        status: 'completed',
+      });
 
       await scansService.createScan({ packageName: 'left-pad' });
 
+      expect(prisma.finding.deleteMany.mock.calls[0][0].where).toEqual({
+        scanInfo: { packageVersionId: 9n },
+      });
+      expect(prisma.scan.upsert.mock.calls[0][0].update).toMatchObject({
+        status: 'queued',
+        riskScore: null,
+        riskLevel: null,
+        error: null,
+        analyzerVersion: null,
+        startedAt: null,
+        completedAt: null,
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the old user on an anonymous rescan', async () => {
+      await scansService.createScan({ packageName: 'left-pad' });
+
+      expect(prisma.scan.upsert.mock.calls[0][0].update).not.toHaveProperty(
+        'userId',
+      );
+    });
+
+    it('removes the last job, then queues the scan', async () => {
+      await scansService.createScan({ packageName: 'left-pad' });
+
+      expect(scanQueue.remove).toHaveBeenCalledWith('Ab3dE5gH7j');
       expect(scanQueue.add).toHaveBeenCalledWith(
         'scan',
         { scanUid: 'Ab3dE5gH7j' },
@@ -78,29 +172,48 @@ describe('ScansService', () => {
           backoff: { type: 'exponential', delay: 5000 },
         },
       );
+      expect(scanQueue.remove.mock.invocationCallOrder[0]).toBeLessThan(
+        scanQueue.add.mock.invocationCallOrder[0],
+      );
     });
 
-    it('links the scan to the logged-in user', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 7n });
-      prisma.scan.create.mockResolvedValue(created);
+    it.each(['queued', 'running'])(
+      'returns a %s scan as it is, without a second job',
+      async (status) => {
+        prisma.scan.findUnique.mockResolvedValue({ ...SCAN, status });
 
-      await scansService.createScan({ packageName: 'left-pad' }, USER);
+        const result = await scansService.createScan({
+          packageName: 'left-pad',
+        });
 
-      expect(prisma.user.findUnique.mock.calls[0][0].where).toEqual({
-        uid: USER.uid,
-      });
-      expect(prisma.scan.create.mock.calls[0][0].data.userId).toBe(7n);
+        expect(result).toMatchObject({
+          status: HttpStatus.ACCEPTED,
+          message: 'Scan is already in progress',
+          data: { uid: 'Ab3dE5gH7j', status, version: '1.3.0' },
+        });
+        expect(prisma.scan.upsert).not.toHaveBeenCalled();
+        expect(scanQueue.add).not.toHaveBeenCalled();
+      },
+    );
+
+    it('throws NotFoundException when the version does not exist', async () => {
+      await expect(
+        scansService.createScan({ packageName: 'left-pad', version: '9.9.9' }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.package.upsert).not.toHaveBeenCalled();
+      expect(scanQueue.add).not.toHaveBeenCalled();
     });
 
-    it('returns a null version when none was requested', async () => {
-      prisma.scan.create.mockResolvedValue({
-        ...created,
-        requestedVersion: null,
-      });
+    it('passes on the 404 when the package does not exist', async () => {
+      const error = new NotFoundException('Package "nope" was not found');
+      registry.getPackage.mockRejectedValue(error);
 
-      const result = await scansService.createScan({ packageName: 'left-pad' });
+      await expect(
+        scansService.createScan({ packageName: 'nope' }),
+      ).rejects.toBe(error);
 
-      expect(result.data.version).toBeNull();
+      expect(prisma.package.upsert).not.toHaveBeenCalled();
     });
   });
 
@@ -110,7 +223,6 @@ describe('ScansService', () => {
         uid: 'Ab3dE5gH7j',
         status: 'completed',
         packageName: 'left-pad',
-        requestedVersion: null,
         riskScore: 82,
         riskLevel: 'high',
         error: null,
@@ -140,33 +252,6 @@ describe('ScansService', () => {
         error: null,
       });
       expect(result.data.findings).toHaveLength(1);
-    });
-
-    it('falls back to the requested version while the scan is queued', async () => {
-      prisma.scan.findUnique.mockResolvedValue({
-        uid: 'Ab3dE5gH7j',
-        status: 'queued',
-        packageName: 'left-pad',
-        requestedVersion: '1.3.0',
-        riskScore: null,
-        riskLevel: null,
-        error: null,
-        createdAt: CREATED_AT,
-        startedAt: null,
-        completedAt: null,
-        packageVersionInfo: null,
-        findings: [],
-      });
-
-      const result = await scansService.getScan('Ab3dE5gH7j');
-
-      expect(result.data).toMatchObject({
-        version: '1.3.0',
-        riskScore: null,
-        riskLevel: null,
-        findings: [],
-        completedAt: null,
-      });
     });
 
     it('throws NotFoundException when the scan does not exist', async () => {
