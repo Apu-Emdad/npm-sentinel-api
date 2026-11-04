@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import dayjs from 'dayjs';
 import { createFakeEmailTokens } from '../../../test/fakes/fake-email-tokens.js';
 import { FakeMailService } from '../../../test/fakes/fake-mail.js';
 import type { Env } from '../../config/env.js';
@@ -12,7 +13,6 @@ import { EmailTokenService } from './email-token.service.js';
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 const user = { id: 1n, userName: 'apu_emdad', email: 'apu@example.com' };
-const MINUTE = 60 * 1000;
 
 describe('EmailTokenService', () => {
   let emailTokens: ReturnType<typeof createFakeEmailTokens>;
@@ -46,16 +46,16 @@ describe('EmailTokenService', () => {
   });
 
   it('a verify link lasts 24 hours and a reset link 30 minutes', async () => {
-    vi.useFakeTimers({ now: new Date('2026-10-31T10:00:00Z') });
+    vi.useFakeTimers({ now: dayjs('2026-10-31T10:00:00Z').toDate() });
 
     await service.create(user.id, EmailTokenType.verify_email);
     await service.create(user.id, EmailTokenType.reset_password);
 
     expect(emailTokens.rows[0].expiresAt).toEqual(
-      new Date('2026-11-01T10:00:00Z'),
+      dayjs('2026-11-01T10:00:00Z').toDate(),
     );
     expect(emailTokens.rows[1].expiresAt).toEqual(
-      new Date('2026-10-31T10:30:00Z'),
+      dayjs('2026-10-31T10:30:00Z').toDate(),
     );
   });
 
@@ -91,10 +91,10 @@ describe('EmailTokenService', () => {
   });
 
   it('rejects an expired token', async () => {
-    vi.useFakeTimers({ now: new Date('2026-10-31T10:00:00Z') });
+    vi.useFakeTimers({ now: dayjs('2026-10-31T10:00:00Z').toDate() });
     const token = await service.create(user.id, EmailTokenType.reset_password);
 
-    vi.setSystemTime(Date.now() + 31 * MINUTE);
+    vi.setSystemTime(dayjs().add(31, 'minute').toDate());
 
     await expect(
       service.consume(token, EmailTokenType.reset_password),

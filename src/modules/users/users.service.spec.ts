@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import dayjs from 'dayjs';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import type { TokenService } from '../auth/token.service.js';
@@ -20,7 +21,7 @@ const selectedUser = {
   userName: 'apu_emdad',
   email: 'apu@example.com',
   isActive: true,
-  createdAt: new Date('2026-10-23T00:00:00Z'),
+  createdAt: dayjs('2026-10-23T00:00:00Z').toDate(),
   roleInfo: { uid: 'role-uid01', name: 'USER' },
 };
 

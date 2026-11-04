@@ -1,11 +1,10 @@
+import dayjs from 'dayjs';
 import { CheckType, Severity } from '../../generated/prisma/enums.js';
 import type {
   RegistryPackage,
   RegistryVersion,
 } from '../../modules/packages/registry/registry.types.js';
 import type { Check, CheckFinding } from '../analyzer.types.js';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** A release this long after the previous one counts as a long gap. */
 const LONG_GAP_DAYS = 730;
@@ -44,8 +43,11 @@ const getPreviousVersion = (
   if (!publishedAt) return null;
 
   const earlier = registryPackage.versions
-    .filter((item) => item.publishedAt && item.publishedAt < publishedAt)
-    .sort((a, b) => a.publishedAt!.localeCompare(b.publishedAt!));
+    .filter(
+      (item) =>
+        item.publishedAt && dayjs(item.publishedAt).isBefore(publishedAt),
+    )
+    .sort((a, b) => dayjs(a.publishedAt).diff(b.publishedAt));
 
   return earlier.at(-1) ?? null;
 };
@@ -80,7 +82,7 @@ const findLongGap = (
   previous: RegistryVersion,
   current: RegistryVersion,
 ): CheckFinding | null => {
-  const gapDays = daysBetween(previous.publishedAt!, current.publishedAt!);
+  const gapDays = dayjs(current.publishedAt).diff(previous.publishedAt, 'day');
   if (gapDays < LONG_GAP_DAYS) return null;
 
   return {
@@ -103,10 +105,7 @@ const findNewAndUnused = (
 ): CheckFinding | null => {
   if (!registryPackage.createdAt || weeklyDownloads === null) return null;
 
-  const ageDays = daysBetween(
-    registryPackage.createdAt,
-    new Date().toISOString(),
-  );
+  const ageDays = dayjs().diff(registryPackage.createdAt, 'day');
   if (ageDays >= NEW_PACKAGE_DAYS || weeklyDownloads >= LOW_WEEKLY_DOWNLOADS) {
     return null;
   }
@@ -119,7 +118,3 @@ const findNewAndUnused = (
     details: { rule: 'new and unused', ageDays, weeklyDownloads },
   };
 };
-
-/** Whole days from one ISO date to another. */
-const daysBetween = (from: string, to: string) =>
-  Math.floor((Date.parse(to) - Date.parse(from)) / DAY_MS);

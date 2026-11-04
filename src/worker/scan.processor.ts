@@ -7,6 +7,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
+import dayjs from 'dayjs';
 import {
   ANALYZER_VERSION,
   SCAN_TIMEOUT_MS,
@@ -59,7 +60,7 @@ export class ScanProcessor extends WorkerHost {
     // 1. marking the scan as running
     const scan = await this.prisma.scan.update({
       where: { uid: job.data.scanUid },
-      data: { status: ScanStatus.running, startedAt: new Date() },
+      data: { status: ScanStatus.running, startedAt: dayjs().toDate() },
       select: { id: true, packageName: true, requestedVersion: true },
     });
 
@@ -182,7 +183,7 @@ export class ScanProcessor extends WorkerHost {
         packageId: packageRow.id,
         version: registryVersion.version,
         publishedAt: registryVersion.publishedAt
-          ? new Date(registryVersion.publishedAt)
+          ? dayjs(registryVersion.publishedAt).toDate()
           : null,
         tarballUrl: registryVersion.tarballUrl ?? '',
         integrity: registryVersion.integrity,
@@ -219,7 +220,7 @@ export class ScanProcessor extends WorkerHost {
           riskLevel: result.riskLevel,
           metadataSnapshot: result.metadataSnapshot as Prisma.InputJsonValue,
           analyzerVersion: ANALYZER_VERSION,
-          completedAt: new Date(),
+          completedAt: dayjs().toDate(),
         },
       }),
     ]);
@@ -231,7 +232,7 @@ export class ScanProcessor extends WorkerHost {
       data: {
         status: ScanStatus.failed,
         error: reason,
-        completedAt: new Date(),
+        completedAt: dayjs().toDate(),
       },
     });
   }

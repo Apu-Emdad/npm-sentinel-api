@@ -1,9 +1,8 @@
+import dayjs from 'dayjs';
 import type { CheckInput } from '../analyzer.types.js';
 import { maintainerAnomalyCheck } from './maintainer-anomaly.check.js';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const daysAgo = (days: number) =>
-  new Date(Date.now() - days * DAY_MS).toISOString();
+const daysAgo = (days: number) => dayjs().subtract(days, 'day').toISOString();
 
 const version = (
   number: string,

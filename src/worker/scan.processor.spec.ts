@@ -5,6 +5,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Job } from 'bullmq';
+import dayjs from 'dayjs';
 import type { AnalyzerService } from '../analyzer/analyzer.service.js';
 import type { RegistryService } from '../modules/packages/registry/registry.service.js';
 import type { PrismaService } from '../infra/prisma/prisma.service.js';
@@ -134,7 +135,7 @@ describe('ScanProcessor', () => {
     expect(prisma.packageVersion.upsert.mock.calls[0][0].create).toMatchObject({
       packageId: 5n,
       version: '1.3.0',
-      publishedAt: new Date('2018-04-01T00:00:00.000Z'),
+      publishedAt: dayjs('2018-04-01T00:00:00.000Z').toDate(),
       integrity: 'sha512-new',
     });
     expect(lastScanUpdate()).toMatchObject({
