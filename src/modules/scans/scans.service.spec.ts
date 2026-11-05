@@ -264,6 +264,32 @@ describe('ScansService', () => {
       ]);
     });
 
+    it('marks devDependencies as dev', async () => {
+      await bulkScan(
+        {
+          dependencies: { 'left-pad': '^1.0.0' },
+          devDependencies: { 'left-pad': '1.2.0', vitest: 'file:../vitest' },
+        },
+        true,
+      );
+
+      expect(savedManifest().manifestDependencies.create[0].isDev).toBe(false);
+      expect(savedManifest().skipped[0]).toMatchObject({
+        packageName: 'vitest',
+        isDev: true,
+      });
+    });
+
+    it.each([
+      [{ name: ' my-shop-api ' }, 'my-shop-api'],
+      [{}, null],
+      [{ name: 42 }, null],
+    ])('saves the package.json name from %j', async (fields, name) => {
+      await bulkScan({ ...fields, dependencies: { 'left-pad': '^1.0.0' } });
+
+      expect(savedManifest().name).toBe(name);
+    });
+
     it('skips dependencies that are not on the registry', async () => {
       await bulkScan({
         dependencies: {
@@ -281,31 +307,37 @@ describe('ScansService', () => {
         {
           packageName: 'a',
           range: 'git+https://github.com/x/a.git',
+          isDev: false,
           reason: 'Git dependencies are not scanned',
         },
         {
           packageName: 'b',
           range: 'https://example.com/b.tgz',
+          isDev: false,
           reason: 'URL dependencies are not scanned',
         },
         {
           packageName: 'c',
           range: 'file:../c',
+          isDev: false,
           reason: 'Local dependencies are not scanned',
         },
         {
           packageName: 'd',
           range: 'workspace:*',
+          isDev: false,
           reason: 'Workspace packages are not scanned',
         },
         {
           packageName: 'e',
           range: 'user/repo#main',
+          isDev: false,
           reason: 'Git dependencies are not scanned',
         },
         {
           packageName: 'f',
           range: 'link:./f',
+          isDev: false,
           reason: 'Local dependencies are not scanned',
         },
       ]);
@@ -328,6 +360,7 @@ describe('ScansService', () => {
         {
           packageName: 'left-pad',
           range,
+          isDev: false,
           scanInfo: { connect: { packageVersionId: 9n } },
         },
       ]);
@@ -373,16 +406,19 @@ describe('ScansService', () => {
         {
           packageName: 'nope',
           range: '^1.0.0',
+          isDev: false,
           reason: 'Package was not found on npm',
         },
         {
           packageName: 'down',
           range: '^1.0.0',
+          isDev: false,
           reason: 'npm registry could not be reached',
         },
         {
           packageName: 'left-pad',
           range: '^9.0.0',
+          isDev: false,
           reason: 'No version matches "^9.0.0"',
         },
       ]);
@@ -450,15 +486,25 @@ describe('ScansService', () => {
   });
 
   describe('getBulkScan', () => {
-    const item = (packageName: string, status: string, riskLevel?: string) => ({
+    const item = (
+      packageName: string,
+      status: string,
+      riskLevel?: string,
+      severities: string[] = [],
+    ) => ({
       packageName,
       range: '^1.0.0',
+      isDev: packageName === 'dev',
       scanInfo: {
         uid: `${packageName}-uid`,
         status,
         riskScore: riskLevel ? 50 : null,
         riskLevel: riskLevel ?? null,
         packageVersionInfo: { version: '1.0.0' },
+        findings: severities.map((severity) => ({
+          severity,
+          summary: `${severity} finding`,
+        })),
       },
     });
 
@@ -472,12 +518,15 @@ describe('ScansService', () => {
       ];
       prisma.manifest.findUnique.mockResolvedValue({
         uid: 'Bk3dE5gH7j',
-        includeDev: false,
+        name: 'my-shop-api',
+        includeDev: true,
         skipped,
         createdAt: CREATED_AT,
         manifestDependencies: [
-          item('a', 'completed', 'high'),
-          item('b', 'completed', 'low'),
+          // findings come from the database highest severity first
+          item('a', 'completed', 'high', ['high', 'medium', 'low']),
+          item('b', 'completed', 'low', ['low']),
+          item('dev', 'completed', 'low'),
           item('c', 'failed'),
           item('d', 'running'),
         ],
@@ -487,18 +536,27 @@ describe('ScansService', () => {
 
       expect(result.data).toMatchObject({
         uid: 'Bk3dE5gH7j',
-        progress: { done: 3, total: 4 },
-        counts: { low: 1, medium: 0, high: 1 },
+        name: 'my-shop-api',
+        progress: { done: 4, total: 5 },
+        counts: { high: 1, medium: 0, low: 1, clean: 1 },
         skipped,
       });
       expect(result.data.items[0]).toEqual({
         packageName: 'a',
         range: '^1.0.0',
+        isDev: false,
         scanUid: 'a-uid',
         version: '1.0.0',
         status: 'completed',
         riskScore: 50,
         riskLevel: 'high',
+        findings: { high: 1, medium: 1, low: 1 },
+        topFinding: 'high finding',
+      });
+      expect(result.data.items[2]).toMatchObject({
+        isDev: true,
+        findings: { high: 0, medium: 0, low: 0 },
+        topFinding: null,
       });
     });
 

@@ -45,6 +45,7 @@ const NOT_ON_REGISTRY = [
 interface Dependency {
   packageName: string;
   range: string;
+  isDev: boolean;
 }
 
 interface SkippedDependency extends Dependency {
@@ -65,6 +66,7 @@ interface ResolvedTarget {
 
 /** The fields of package.json a bulk scan reads. */
 interface PackageJson {
+  name?: unknown;
   dependencies?: Record<string, unknown>;
   devDependencies?: Record<string, unknown>;
 }
@@ -196,7 +198,7 @@ export class ScansService {
     authUser?: AuthUser,
   ): Promise<Result> {
     // 1. reading the dependencies; bad JSON or no dependencies is a 400
-    const dependencies = this.readDependencies(
+    const { name, dependencies } = this.readDependencies(
       dto.packageJson,
       dto.includeDev ?? false,
     );
@@ -245,6 +247,7 @@ export class ScansService {
       items.push({
         packageName: target.packageName,
         range: target.range,
+        isDev: target.isDev,
         scanInfo: { connect: { packageVersionId } },
       });
     }
@@ -253,6 +256,7 @@ export class ScansService {
     const manifest = await this.prisma.manifest.create({
       data: {
         userId,
+        name,
         includeDev: dto.includeDev ?? false,
         skipped: skipped as unknown as Prisma.InputJsonValue,
         manifestDependencies: { create: items },
@@ -272,6 +276,7 @@ export class ScansService {
       where: { uid },
       select: {
         uid: true,
+        name: true,
         includeDev: true,
         skipped: true,
         createdAt: true,
@@ -280,6 +285,7 @@ export class ScansService {
           select: {
             packageName: true,
             range: true,
+            isDev: true,
             scanInfo: {
               select: {
                 uid: true,
@@ -287,6 +293,11 @@ export class ScansService {
                 riskScore: true,
                 riskLevel: true,
                 packageVersionInfo: { select: { version: true } },
+                // the enum is declared low, medium, high, so desc puts high first
+                findings: {
+                  orderBy: { severity: 'desc' },
+                  select: { severity: true, summary: true },
+                },
               },
             },
           },
@@ -299,15 +310,25 @@ export class ScansService {
     }
 
     const items = manifest.manifestDependencies.map(
-      ({ packageName, range, scanInfo }) => ({
-        packageName,
-        range,
-        scanUid: scanInfo.uid,
-        version: scanInfo.packageVersionInfo.version,
-        status: scanInfo.status,
-        riskScore: scanInfo.riskScore,
-        riskLevel: scanInfo.riskLevel,
-      }),
+      ({ packageName, range, isDev, scanInfo }) => {
+        const findings = { high: 0, medium: 0, low: 0 };
+        for (const finding of scanInfo.findings) {
+          findings[finding.severity] += 1;
+        }
+
+        return {
+          packageName,
+          range,
+          isDev,
+          scanUid: scanInfo.uid,
+          version: scanInfo.packageVersionInfo.version,
+          status: scanInfo.status,
+          riskScore: scanInfo.riskScore,
+          riskLevel: scanInfo.riskLevel,
+          findings,
+          topFinding: scanInfo.findings[0]?.summary ?? null,
+        };
+      },
     );
 
     // a scan is done once it has completed or failed
@@ -317,9 +338,12 @@ export class ScansService {
         item.status === ScanStatus.failed,
     ).length;
 
-    const counts = { low: 0, medium: 0, high: 0 };
+    // a completed scan with no findings is clean, not low risk
+    const counts = { high: 0, medium: 0, low: 0, clean: 0 };
     for (const item of items) {
-      if (item.riskLevel) counts[item.riskLevel] += 1;
+      if (item.status !== ScanStatus.completed || !item.riskLevel) continue;
+      if (!item.topFinding) counts.clean += 1;
+      else counts[item.riskLevel] += 1;
     }
 
     return {
@@ -327,6 +351,7 @@ export class ScansService {
       message: 'Bulk scan fetched successfully',
       data: {
         uid: manifest.uid,
+        name: manifest.name,
         includeDev: manifest.includeDev,
         createdAt: manifest.createdAt,
         progress: { done, total: items.length },
@@ -407,13 +432,14 @@ export class ScansService {
   /**
    * Reads `dependencies`, and `devDependencies` when asked, from package.json text
    *
-   * A name in both lists is read once. Throws BadRequestException for text
-   * that is not a JSON object, or a file without dependencies.
+   * Also returns the package.json `name`, or null. A name in both lists is
+   * read once, from `dependencies`. Throws BadRequestException for text that
+   * is not a JSON object, or a file without dependencies.
    */
   private readDependencies(
     packageJson: string,
     includeDev: boolean,
-  ): Dependency[] {
+  ): { name: string | null; dependencies: Dependency[] } {
     let parsed: unknown;
     try {
       parsed = JSON.parse(packageJson);
@@ -424,14 +450,20 @@ export class ScansService {
       throw new BadRequestException('package.json must be a JSON object');
     }
 
-    const lists = [(parsed as PackageJson).dependencies];
-    if (includeDev) lists.push((parsed as PackageJson).devDependencies);
+    const { name, dependencies: prod, devDependencies } = parsed as PackageJson;
+    const lists = [{ list: prod, isDev: false }];
+    if (includeDev) lists.push({ list: devDependencies, isDev: true });
 
-    const dependencies = new Map<string, string>();
-    for (const list of lists) {
+    const dependencies = new Map<string, Dependency>();
+    for (const { list, isDev } of lists) {
       if (!list || typeof list !== 'object') continue;
-      for (const [name, range] of Object.entries(list)) {
-        if (!dependencies.has(name)) dependencies.set(name, String(range));
+      for (const [packageName, range] of Object.entries(list)) {
+        if (dependencies.has(packageName)) continue;
+        dependencies.set(packageName, {
+          packageName,
+          range: String(range),
+          isDev,
+        });
       }
     }
 
@@ -439,10 +471,10 @@ export class ScansService {
       throw new BadRequestException('package.json has no dependencies');
     }
 
-    return [...dependencies].map(([packageName, range]) => ({
-      packageName,
-      range,
-    }));
+    return {
+      name: typeof name === 'string' && name.trim() ? name.trim() : null,
+      dependencies: [...dependencies.values()],
+    };
   }
 
   /**
@@ -487,6 +519,7 @@ export class ScansService {
     const skip = (reason: string): SkippedDependency => ({
       packageName: target.packageName,
       range: target.range,
+      isDev: target.isDev,
       reason,
     });
 
