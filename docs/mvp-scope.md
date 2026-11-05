@@ -2,7 +2,7 @@
 
 ## Goal
 
-A user enters an npm package name and gets a risk report: a score from 0 to 100, a risk level, and a list of findings, each with the evidence that triggered it.
+A user enters an npm package name, or pastes a `package.json`, and gets a risk report: a score from 0 to 100, a risk level, and a list of findings, each with the evidence that triggered it.
 
 Everything not needed for that is out of the MVP.
 
@@ -17,9 +17,11 @@ Package code is never executed. The analyzer only reads files and registry metad
 ## User flow
 
 1. A visitor submits a package name, and optionally a version (default: `latest`). No login is needed.
-2. The API creates a scan with status `queued` and returns its id immediately.
+2. The API finds the version on the npm registry, creates (or reuses) the version's scan with status `queued` and returns its id immediately.
 3. A worker runs the scan in the background.
 4. The client polls the scan until it is `completed` or `failed`, then shows the report.
+
+A visitor can also paste a `package.json`. Each dependency becomes its own scan, and one bulk scan groups them so the client can poll all of them in one request.
 
 Logged-in users get the same flow; their scans are linked to their account for history (later).
 
@@ -28,22 +30,23 @@ Logged-in users get the same flow; their scans are linked to their account for h
 | Area | What is included |
 | --- | --- |
 | Auth | Optional. Register with username, email and password; login with username or email; JWT, `USER` and `SUPER_ADMIN` roles; optional email verification; password reset by email |
-| Scans | Public. Scan one package version per request, processed asynchronously by a worker |
-| Rate limiting | Per-IP limit on `POST /scans` |
-| Collector | Registry metadata, weekly downloads and the version tarball |
+| Scans | Public. Scan one package version per request, processed asynchronously by a worker. Each version has one scan, shared by everyone; scanning it again reruns the same scan |
+| Bulk scans | Public. Scan every dependency of a pasted `package.json`, optionally with `devDependencies` |
+| Rate limiting | Per-IP limit on `POST /scans`; super admins are not limited |
+| Collector | Registry metadata, weekly downloads, the version tarball, and creation date and downloads of dependencies that are not well-known |
 | Checks | 1. Install scripts, 2. Typosquatting, 3. Obfuscation, 4. Maintainer and publish anomalies, 5. Suspicious dependencies |
 | Scoring | One 0 to 100 score and a risk level per scan |
 | Storage | Packages, versions, scans and findings saved in PostgreSQL |
 | Reviews | `reviews` table exists in the schema; no UI or API for it yet |
-| Web | Scan form and report page |
+| Web | Scan form, report page, `package.json` scan form and results page |
 | Docs | OpenAPI spec served by the API |
 
 ## Out of scope (later)
 
 - Scan history page
-- Bulk scan of a `package.json`
 - Per-user quotas
-- Re-using a previous scan of the same version instead of scanning again
+- Repository link check (does the `repository` field really point to this package)
+- Cleaning up scans stuck in `queued` or `running` after a crash
 - Review management and dataset export
 - CLI tool and GitHub Action
 - Scanning private registries or scoped packages that need auth
@@ -71,7 +74,7 @@ Retries:
 
 - Each check returns zero or more findings: `{ checkType, severity, summary, evidence }`.
 - Severity is `low`, `medium` or `high`.
-- A scoring function combines the findings into a score from 0 to 100. Each finding adds points by severity, capped at 100. Starting weights: `low` 10, `medium` 25, `high` 50. They are tuned when checks 3 to 5 are built.
+- A scoring function combines the findings into a score from 0 to 100. Each finding adds points by severity, capped at 100. Weights: `low` 10, `medium` 25, `high` 50 (to be tuned with real data).
 - Each completed scan saves the `analyzer_version` that produced it, and a `metadata_snapshot` of the registry facts the checks saw.
 - The registry fetch and the analysis must finish within 120 seconds, or the attempt fails with `timeout` and is retried.
 - Risk level from the score (initial values, to be tuned with real data):
@@ -162,9 +165,9 @@ Every route needs an access token (`Authorization: Bearer <token>`) unless it is
 - Each refresh token works once and is tracked in Redis. Using an already-used refresh token is treated as theft: every refresh token of that user is revoked and they must log in again.
 - `POST /auth/logout` revokes the refresh token and clears the cookie.
 
-### Scans and packages
+### Scans
 
-These endpoints are public. When a valid JWT is sent to `POST /scans`, the scan is linked to that user.
+These endpoints are public. When a valid JWT is sent to `POST /scans` or `POST /scans/bulk`, the new scans are linked to that user.
 
 #### `POST /scans`
 
@@ -194,9 +197,11 @@ Response `202 Accepted`, `data`:
 }
 ```
 
-`data.status` is the scan status, not the HTTP status. `version` is `null` when none was given; the worker resolves `latest`.
+`data.status` is the scan status, not the HTTP status. `version` is the exact version that will be scanned; when none was given, it is the `latest` dist-tag.
 
-Errors: `400` invalid body, `401` a token was sent but is invalid, `429` rate limit exceeded.
+Each package version has one scan. If that scan is `queued` or `running`, it is returned as it is. If it is `completed` or `failed`, it is scanned again on the same `uid`.
+
+Errors: `400` invalid body, `401` a token was sent but is invalid, `404` package or version not found on the npm registry, `429` rate limit exceeded, `502`/`504` the npm registry is unreachable or timed out.
 
 #### `GET /scans/:uid`
 
@@ -237,31 +242,90 @@ While `queued` or `running`, `riskScore`, `riskLevel` and `completedAt` are `nul
 
 Errors: `404` scan not found.
 
-#### `GET /packages/:name`
+#### `POST /scans/bulk`
 
-Get a package Sentinel has scanned and the latest scan of each scanned version. Scoped names are URL-encoded (`%40scope%2Fname`).
+Scan every dependency of a `package.json`.
+
+Request:
+
+```json
+{
+  "packageJson": "{\"name\":\"my-shop-api\",\"dependencies\":{\"express\":\"^4.21.1\"}}",
+  "includeDev": true
+}
+```
+
+- `packageJson`: required, the file's content as text.
+- `includeDev`: optional, also scan `devDependencies`. Defaults to `false`. A name in both lists is read once, as a dependency.
+
+How each dependency is handled:
+
+- Ranges and dist-tags (`^4.21.1`, `latest`) resolve to an exact version the way npm does: `latest` when it fits the range, else the highest matching version. `npm:` aliases scan the real package.
+- Git, URL, local (`file:`, `link:`) and `workspace:` dependencies are skipped, since their code is not on the registry. So are packages or ranges the registry doesn't have. Each skipped one gets a reason.
+- A version that already has a scan reuses it; only a `failed` one is queued again.
+
+No rate limit: one file is one request, and the queue spreads the work.
+
+Response `202 Accepted`, `data`:
+
+```json
+{
+  "uid": "M8rFTx3DrS",
+  "createdAt": "2026-11-05T16:05:27.871Z",
+  "total": 4,
+  "skipped": 1
+}
+```
+
+`total` is the number of scans, `skipped` the number of skipped dependencies.
+
+Errors: `400` invalid body, text that is not a JSON object, or a file without dependencies; `401` a token was sent but is invalid.
+
+#### `GET /scans/bulk/:uid`
+
+Get a bulk scan's progress and every package's result.
 
 Response `200 OK`, `data`:
 
 ```json
 {
-  "name": "some-package",
-  "versions": [
+  "uid": "M8rFTx3DrS",
+  "name": "my-shop-api",
+  "includeDev": true,
+  "createdAt": "2026-11-05T16:05:27.871Z",
+  "progress": { "done": 4, "total": 4 },
+  "counts": { "high": 0, "medium": 0, "low": 1, "clean": 3 },
+  "items": [
     {
-      "version": "1.2.3",
-      "latestScan": {
-        "uid": "k3F9x2Mq7A",
-        "status": "completed",
-        "riskScore": 82,
-        "riskLevel": "high",
-        "completedAt": "2026-10-20T10:00:09.000Z"
-      }
+      "packageName": "ms",
+      "range": "^2.1.3",
+      "isDev": false,
+      "scanUid": "yNZIYpVvm5",
+      "version": "2.1.3",
+      "status": "completed",
+      "riskScore": 10,
+      "riskLevel": "low",
+      "findings": { "high": 0, "medium": 0, "low": 1 },
+      "topFinding": "New maintainer since 2.1.2: elsigh, leerobinson"
+    }
+  ],
+  "skipped": [
+    {
+      "packageName": "my-lib",
+      "range": "github:someone/my-lib",
+      "isDev": false,
+      "reason": "Git dependencies are not scanned"
     }
   ]
 }
 ```
 
-Errors: `404` package never scanned.
+- `name`: the `package.json` `name`, or `null`.
+- `progress.done`: scans that are `completed` or `failed`.
+- `counts`: completed scans by risk level; `clean` ones had no findings.
+- `topFinding`: the summary of the item's most severe finding, or `null`.
+
+Errors: `404` bulk scan not found.
 
 ## Limits
 
