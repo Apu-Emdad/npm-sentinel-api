@@ -87,6 +87,7 @@ erDiagram
         bigint id PK
         text uid UK
         bigint user_id FK "null if anonymous"
+        text name
         boolean include_dev
         jsonb skipped
     }
@@ -97,6 +98,7 @@ erDiagram
         bigint scan_id FK
         text package_name
         text range
+        boolean is_dev
     }
 ```
 
@@ -222,8 +224,9 @@ One package.json sent to `POST /scans/bulk` (npm calls package.json the package 
 | `id` | `bigint` | no | PK, auto-increment (`bigserial`) |
 | `uid` | `text` | no | Unique, default `generate_uid()`. Returned by `POST /scans/bulk` |
 | `user_id` | `bigint` | yes | FK → `users.id`, on delete set null. `null` if anonymous |
+| `name` | `text` | yes | The `name` field of the package.json, shown on the results page. `null` if it has none |
 | `include_dev` | `boolean` | no | Whether `devDependencies` were scanned too |
-| `skipped` | `jsonb` | no | Default `[]`. Dependencies that were not scanned, as `{ packageName, range, reason }`: git, URL, local and workspace dependencies, missing packages, ranges no version matches |
+| `skipped` | `jsonb` | no | Default `[]`. Dependencies that were not scanned, as `{ packageName, range, isDev, reason }`: git, URL, local and workspace dependencies, missing packages, ranges no version matches |
 | `created_at` | `timestamp(3)` | no | Default `now()` |
 
 Indexes:
@@ -242,6 +245,7 @@ One scanned dependency of a manifest. It points to the scan of the version the r
 | `scan_id` | `bigint` | no | FK → `scans.id`, on delete cascade |
 | `package_name` | `text` | no | The dependency name as written in package.json (the alias name for `npm:` aliases) |
 | `range` | `text` | no | The version as written in package.json, e.g. `^4.21.1` or `npm:lodash@^4.17.0` |
+| `is_dev` | `boolean` | no | Default `false`. `true` when it came from `devDependencies`; a name in both lists counts as a normal dependency |
 | `created_at` | `timestamp(3)` | no | Default `now()` |
 
 Indexes:

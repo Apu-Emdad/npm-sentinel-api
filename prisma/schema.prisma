@@ -164,6 +164,7 @@ model Manifest {
   id         BigInt   @id @default(autoincrement())
   uid        String   @unique @default(dbgenerated("generate_uid()"))
   userId     BigInt?  @map("user_id")
+  name       String?
   includeDev Boolean  @map("include_dev")
   skipped    Json     @default("[]")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -182,6 +183,7 @@ model ManifestDependency {
   scanId      BigInt   @map("scan_id")
   packageName String   @map("package_name")
   range       String
+  isDev       Boolean  @default(false) @map("is_dev")
   createdAt   DateTime @default(now()) @map("created_at")
 
   manifestInfo Manifest @relation(fields: [manifestId], references: [id], onDelete: Cascade)
