@@ -5,18 +5,21 @@
 
 Scan an npm package before you install it. npm-sentinel runs static analysis on a package and returns a risk score from 0 to 100, a risk level, and a list of findings, each with the evidence that triggered it.
 
-> **Status:** work in progress. Auth and user management are done; the scanner is being built. See [MVP scope](docs/mvp-scope.md) for the plan.
+> **Status:** MVP feature complete. See [MVP scope](docs/mvp-scope.md) for what is in and what comes later.
 
 ## Why
 
 Installing a package runs code from a stranger on your machine. Typosquatted names, hidden `postinstall` scripts and obfuscated code are common ways malware gets into projects. npm-sentinel checks for these signs and explains what it found, so you can decide before you run `npm install`.
 
-**Package code is never executed.** The analyzer only reads files and registry metadata. Tarballs are extracted in a throwaway container with no network access and deleted when the scan ends.
+**Package code is never executed.** The analyzer only reads files and registry metadata. Tarballs are unpacked in memory, never written to disk, and dropped when the scan ends.
 
 ## Features
 
-**Done**
-
+- Scan one package version, or every dependency of a `package.json` at once; no account needed
+- Scans run in a background worker; one scan per package version, shared by everyone who asks for it
+- Five checks: install scripts, typosquatting, obfuscation, maintainer and publish anomalies, suspicious dependencies
+- One risk score and level per scan, with the evidence for every finding
+- Per-IP rate limit on single scans (super admins are not limited)
 - Register and log in with username or email
 - Optional email verification and password reset by email (SMTP through Brevo)
 - JWT access tokens with rotating refresh tokens in an `httpOnly` cookie; a reused refresh token revokes all of the user's sessions
@@ -24,12 +27,15 @@ Installing a package runs code from a stranger on your machine. Typosquatted nam
 - OpenAPI docs served by the API
 - One-command setup with Docker Compose
 
-**Planned (MVP)**
+## How a scan works
 
-- Asynchronous scans processed by a background worker
-- Five checks: install scripts, typosquatting, obfuscation, maintainer and publish anomalies, suspicious dependencies
-- One risk score and level per scan, with the evidence for every finding
-- Per-IP rate limiting on scans
+1. The client sends `POST /scans` with a package name and an optional exact version (default: `latest`). The API checks the version on the npm registry and answers `202` with the scan's `uid`.
+2. The scan is queued in Redis (BullMQ). A version that already has a scan reuses it: a queued or running scan is returned as it is, a finished one is scanned again on the same `uid`.
+3. The worker fetches the registry metadata, last week's downloads and the tarball, unpacks it in memory and runs the five checks.
+4. The findings are combined into a score from 0 to 100 and a risk level, and saved with the scan.
+5. The client polls `GET /scans/:uid` until the status is `completed` or `failed`.
+
+A `package.json` scan (`POST /scans/bulk`) does the same for each dependency. Ranges like `^4.21.1` are resolved to an exact version the way npm does, finished scans are reused, and git, URL, local and workspace dependencies are skipped with a reason. `GET /scans/bulk/:uid` returns the progress and every package's result.
 
 ## Tech stack
 

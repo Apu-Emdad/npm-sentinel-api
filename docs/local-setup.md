@@ -43,7 +43,7 @@ Or run the API and the worker together in one terminal with `yarn dev:all`. With
 
 `yarn db:seed` creates the `USER` and `SUPER_ADMIN` roles, then the first super admin: user name `admin`, email `admin@example.com`, password `12345678`. It does nothing if that user name or email already exists, so it is safe to run again. Change the password after the first login on any shared or hosted database.
 
-`docker compose up -d --wait postgres redis` starts only PostgreSQL and Redis (Redis stores the active refresh tokens). Data is kept in named volumes, so it survives `docker compose down`; `docker compose down -v` deletes it.
+`docker compose up -d --wait postgres redis` starts only PostgreSQL and Redis (Redis holds the scan queue, the active refresh tokens and the rate limit counters). Data is kept in named volumes, so it survives `docker compose down`; `docker compose down -v` deletes it.
 
 The app validates `.env` on startup and exits with a list of the missing or invalid variables.
 
@@ -65,6 +65,10 @@ In Brevo: verify the sender under **Senders, domains and IPs**, then generate an
 The API starts without connecting to SMTP. If an email fails, the error is logged (never the SMTP password). Registration and forgot password still succeed; resend verification returns a 500 so the user can try again.
 
 Rate limits: forgot password and resend verification allow 5 requests per 15 minutes per email and per IP, counted in Redis. The IP is `req.ip`; behind a proxy, enable Express `trust proxy` so it is the client's IP.
+
+## Scan rate limit
+
+`POST /scans` allows `SCAN_RATE_LIMIT` scans (default 10) per `SCAN_RATE_WINDOW` seconds (default 3600) per IP, counted in Redis. Over that it returns `429`. Super admins are not limited, and `POST /scans/bulk` has no limit.
 
 ## Services
 
