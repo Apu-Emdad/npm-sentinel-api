@@ -112,7 +112,7 @@ yarn dev:all
 
 ## Related
 
-- [npm-sentinel-web](https://github.com/Apu-Emdad/npm-sentinel-web): the React dashboard
+- [npm-sentinel-web](https://github.com/Apu-Emdad/npm-sentinel-web): the React dashboard ([screenshots](https://github.com/Apu-Emdad/npm-sentinel-web#screenshots))
 
 ## License
 
