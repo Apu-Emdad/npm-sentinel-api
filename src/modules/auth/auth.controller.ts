@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { CookieOptions, Request, Response } from 'express';
+import { API_PREFIX } from '../../common/constants/api.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 import type { Env } from '../../config/env.js';
@@ -122,14 +123,14 @@ export class AuthController {
   /**
    * httpOnly: JavaScript can't read it, so XSS can't steal it.
    * secure: HTTPS only in production. sameSite strict: never sent from other sites.
-   * path /auth: only sent to the auth endpoints, not to every API call.
+   * path /api/auth: only sent to the auth endpoints, not to every API call.
    */
   private cookieOptions(): CookieOptions {
     return {
       httpOnly: true,
       secure: this.config.get('NODE_ENV', { infer: true }) === 'production',
       sameSite: 'strict',
-      path: '/auth',
+      path: `/${API_PREFIX}/auth`,
     };
   }
 }

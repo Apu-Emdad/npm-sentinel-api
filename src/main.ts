@@ -1,17 +1,19 @@
 import { networkInterfaces } from 'node:os';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { configureApp } from './app.setup.js';
+import { API_PREFIX } from './common/constants/api.js';
 import type { Env } from './config/env.js';
 import { REFRESH_COOKIE } from './modules/auth/auth.controller.js';
 import { SWAGGER_CUSTOM_CSS, SWAGGER_CUSTOM_JS } from './swagger/swagger-ui.js';
 
-const DOCS_PATH = 'docs';
+const DOCS_PATH = `${API_PREFIX}/docs`;
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   configureApp(app);
 
   const swaggerConfig = new DocumentBuilder()

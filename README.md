@@ -62,11 +62,11 @@ docker compose up --build
 
 This starts PostgreSQL, Redis, the API and the scan worker, applies the database migrations and creates the first super admin: user name `admin`, password `12345678`. Press Ctrl+C to stop everything.
 
-|                    | URL                            |
-| ------------------ | ------------------------------ |
-| API                | `http://localhost:7000`        |
-| API docs (Swagger) | `http://localhost:7000/docs`   |
-| Health check       | `http://localhost:7000/health` |
+|                    | URL                                |
+| ------------------ | ---------------------------------- |
+| API                | `http://localhost:7000`            |
+| API docs (Swagger) | `http://localhost:7000/api/docs`   |
+| Health check       | `http://localhost:7000/api/health` |
 
 The port comes from `PORT` in `.env`. Change the secrets in `.env` and the super admin password before using it anywhere other than your own machine.
 

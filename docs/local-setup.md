@@ -15,7 +15,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-This builds the API image and starts PostgreSQL, Redis, a one-off `migrate` job, the API and the worker. `migrate` applies the migrations and runs the seed, then exits; the API and the worker start after it succeeds. The worker uses the same image as the API but runs `node dist/worker.main`: it takes scan jobs from the Redis queue and has no HTTP server or port. The API listens on `PORT` from `.env`, with the Swagger docs at `/docs`. The logs stream in the terminal; press Ctrl+C to stop everything.
+This builds the API image and starts PostgreSQL, Redis, a one-off `migrate` job, the API and the worker. `migrate` applies the migrations and runs the seed, then exits; the API and the worker start after it succeeds. The worker uses the same image as the API but runs `node dist/worker.main`: it takes scan jobs from the Redis queue and has no HTTP server or port. The API listens on `PORT` from `.env`, with the Swagger docs at `/api/docs`. The logs stream in the terminal; press Ctrl+C to stop everything.
 
 Inside Docker the API reaches PostgreSQL and Redis by service name (`postgres:5432`, `redis:6379`), so `docker-compose.yml` overrides `DATABASE_URL`, `REDIS_HOST` and `REDIS_PORT` from `.env` for the API, the worker and `migrate`.
 

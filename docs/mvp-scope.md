@@ -87,6 +87,8 @@ Retries:
 
 ## API contract
 
+Every route starts with `/api` (for example `POST /api/auth/login`), so a reverse proxy can send `/api` to the API and everything else to the web app. The paths below leave out the prefix. Swagger is at `/api/docs`.
+
 ### Response format
 
 Every response, success or error, has the same shape:
@@ -103,14 +105,14 @@ Every response, success or error, has the same shape:
 - `message`: a short human-readable result.
 - `data`: the payload. Omitted on most errors; validation errors (`400`) put the list of problems in it.
 - `error`: on errors, the HTTP error name, e.g. `Conflict`.
-- `context`: on errors, the request that failed, e.g. `POST /auth/register`.
+- `context`: on errors, the request that failed, e.g. `POST /api/auth/register`.
 
 ```json
 {
   "status": 409,
   "message": "Username is already taken",
   "error": "Conflict",
-  "context": "POST /auth/register"
+  "context": "POST /api/auth/register"
 }
 ```
 
@@ -120,7 +122,7 @@ Every response, success or error, has the same shape:
   "message": "Validation failed",
   "data": ["Email must be a valid email address", "Password must be at least 8 characters"],
   "error": "Bad Request",
-  "context": "POST /auth/register"
+  "context": "POST /api/auth/register"
 }
 ```
 
