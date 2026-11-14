@@ -1,18 +1,5 @@
 import type { Result } from '../../common/interfaces/result.interface.js';
 
-// Claims inside the access token.
-export interface JwtPayload {
-  sub: string; // user uid
-  userName: string;
-  role: string;
-}
-
-// Claims inside the refresh token. `jti` identifies it in Redis.
-export interface RefreshPayload {
-  sub: string; // user uid
-  jti: string;
-}
-
 // The logged-in user attached to the request by AuthGuard.
 export interface AuthUser {
   uid: string;

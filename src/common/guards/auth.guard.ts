@@ -8,9 +8,9 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
-import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator.js';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
-import type { JwtPayload } from './auth.types.js';
+import type { JwtPayload } from '../../infra/token/token.types.js';
 
 /**
  * Global guard: every route needs a valid token unless it is marked @Public().

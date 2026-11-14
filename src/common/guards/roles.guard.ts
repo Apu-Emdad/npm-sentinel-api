@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
-import { ROLES_KEY } from '../../common/decorators/roles.decorator.js';
+import { ROLES_KEY } from '../decorators/roles.decorator.js';
 
 // Global guard, runs after AuthGuard: enforces @Roles(...) where it is set.
 @Injectable()

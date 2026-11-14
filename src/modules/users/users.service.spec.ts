@@ -6,7 +6,7 @@ import {
 import dayjs from 'dayjs';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth.types.js';
-import type { TokenService } from '../auth/token.service.js';
+import type { TokenService } from '../../infra/token/token.service.js';
 import { UsersService } from './users.service.js';
 
 const ADMIN: AuthUser = {

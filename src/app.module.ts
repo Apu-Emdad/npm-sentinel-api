@@ -10,9 +10,10 @@ import { MailModule } from './infra/mail/mail.module.js';
 import { PrismaModule } from './infra/prisma/prisma.module.js';
 import { QueueModule } from './infra/queue/queue.module.js';
 import { RedisModule } from './infra/redis/redis.module.js';
-import { AuthGuard } from './modules/auth/auth.guard.js';
+import { TokenModule } from './infra/token/token.module.js';
+import { AuthGuard } from './common/guards/auth.guard.js';
 import { AuthModule } from './modules/auth/auth.module.js';
-import { RolesGuard } from './modules/auth/roles.guard.js';
+import { RolesGuard } from './common/guards/roles.guard.js';
 import { ScansModule } from './modules/scans/scans.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
@@ -28,6 +29,7 @@ import { UsersModule } from './modules/users/users.module.js';
     MailModule,
     QueueModule,
     ErrorLoggerModule,
+    TokenModule,
     AuthModule,
     UsersModule,
     ScansModule,

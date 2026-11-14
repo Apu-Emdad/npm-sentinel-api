@@ -20,7 +20,7 @@ import { RateLimitService } from '../../infra/redis/rate-limit.service.js';
 import type { RedisService } from '../../infra/redis/redis.service.js';
 import { AuthService } from './auth.service.js';
 import { EmailTokenService } from './email-token.service.js';
-import { TokenService } from './token.service.js';
+import { TokenService } from '../../infra/token/token.service.js';
 
 const ACCESS_SECRET = 'a-test-access-secret-at-least-32-chars';
 const env: Record<string, unknown> = {

@@ -14,8 +14,10 @@ import type { Result } from '../../common/interfaces/result.interface.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { EmailTokenType } from '../../generated/prisma/enums.js';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
+import { TokenService } from '../../infra/token/token.service.js';
+import type { JwtPayload } from '../../infra/token/token.types.js';
 import { RateLimitService } from '../../infra/redis/rate-limit.service.js';
-import type { AuthResult, AuthUser, JwtPayload } from './auth.types.js';
+import type { AuthResult, AuthUser } from './auth.types.js';
 import {
   ForgotPasswordDto,
   ResetPasswordDto,
@@ -24,7 +26,6 @@ import {
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { EmailTokenService } from './email-token.service.js';
-import { TokenService } from './token.service.js';
 
 type UserWithRole = Prisma.UserGetPayload<{ include: { roleInfo: true } }>;
 
